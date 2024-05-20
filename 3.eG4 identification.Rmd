@@ -1,0 +1,198 @@
+eG4的鉴定
+#第一步G4 CUT&Tag峰的鉴定
+---
+title: "G4 CUT&Tag峰的鉴定"
+author: "yuss"
+date: "钉钉2023-11-14"
+code path: /home/yuss/flyG4/script/001.4.G4CUT&Taq.intersect.G4seq.R
+
+```{r}
+rm(list = ls());gc();rm(list = ls())#清空
+library(eulerr)
+Num = "001.4."
+VennDiag <- euler(c("kcrep1" = 46461-43192,"kcrep2" = 50422-43192,
+                    "kcrep1&kcrep2" = 43192))
+p <- plot(VennDiag, counts = FALSE, font=3, cex=1, alpha=1,quantities = TRUE,lwd =3.5,
+          labels=c("Kc167 Rep1","Kc167 Rep2"),
+          label.col = "white",fill="white",
+          col = c('#D76364','#D76364'))
+p
+ggsave(p, filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"KcIntersectPeak.pdf"),
+       device = "pdf",width = 3.8,height = 3.8)
+
+```
+```{r}
+VennDiag <- euler(c("s2rep1" = 41922-38659,"s2rep2" = 46351-38659,
+                    "s2rep1&s2rep2" = 38659))
+p <- plot(VennDiag, counts = FALSE, font=3, cex=1, alpha=1,quantities = TRUE,lwd =3.5,
+          labels=c("S2 Rep1","S2 Rep2"),
+          label.col = "white",fill="white",
+          col = c('#5F97D3','#5F97D3'))
+p
+ggsave(p, filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"S2IntersectPeak.pdf"),
+       device = "pdf",width = 3.8,height = 3.8)
+```
+
+#第二步pqs预测
+---
+title: "pqs预测"
+author: "yuss"
+date: "钉钉2023-05-22"
+code path: /home/yuss/flyG4/script/001.1.PQS.predict.R
+
+```{bash}
+(base) yuss@ubuntu:~/flyG4/data/ref$ cp /home/qians/Quadruplex/Input/Ref/Fly/Bwa.dm6.index/dmel-all-chromosome-r6.19.fasta ./
+```
+
+```{r}
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "001.1."
+#安装pqsfinder
+#BiocManager::install("pqsfinder")
+library(pqsfinder)
+library(Biostrings)
+setwd("/home/yuss/flyG4/script/")
+genome <- readDNAStringSet("/home/yuss/flyG4/data/ref/dmel-all-chromosome-r6.19.fasta") 
+# chr2L_pqs <- pqsfinder(genome[[1]],overlapping = FALSE, min_score = 50)
+# chr2R_pqs <- pqsfinder(genome[[2]],overlapping = FALSE, min_score = 50)
+# chr3L_pqs <- pqsfinder(genome[[3]],overlapping = FALSE, min_score = 50)
+# chr3R_pqs <- pqsfinder(genome[[4]],overlapping = FALSE, min_score = 50)
+# chr4_pqs <- pqsfinder(genome[[5]],overlapping = FALSE, min_score = 50)
+# chrX_pqs <- pqsfinder(genome[[6]],overlapping = FALSE, min_score = 50)
+# chrY_pqs <- pqsfinder(genome[[7]],overlapping = FALSE, min_score = 50)
+##overlapping如果为 true，则将报告所有重叠的 PQS。
+##min_score最低PQS分数。默认值 52 显示最佳 Chambers 等人提供的 G4 测序数据的平衡准确性
+
+chr_pqs <- list()
+for (i in 1:7) {
+  chr_pqs[[i]] <- pqsfinder(genome[[i]],overlapping = FALSE,min_score = 50)
+}
+
+a <- c('2L','2R','3L','3R',4,'X','Y')
+#提取信息包括染色体、start、end、width、strand、score(结构稳定性)、seq
+list <- list()
+# list[[1]] <- data.frame(list(chr_pqs[[1]]@ranges,chr_pqs[[1]]@elementMetadata,seq=as.data.frame(chr_pqs[[1]])))
+# list[[1]]$chr <- a[1]
+for (i in 1:length(chr_pqs)) {
+  list[[i]] <- data.frame(list(chr_pqs[[i]]@ranges,chr_pqs[[i]]@elementMetadata))
+  list[[i]]$chr <- a[i]
+}
+df <- do.call('rbind',list)
+##合并数据框，rbind根据行进行合并，就是行的叠加，cbind根据列进行合并，即叠加所有列
+df <- df[,c(15,1:3,5,4,6:14)]
+write.table(df,file = paste0("/home/yuss/flyG4/result/PQS/",Num,"dmel.pqs.txt"), sep = '\t', row.names = F, quote = FALSE)
+```
+
+#第三步PQS和peak取交集，得到eG4和non-eG4
+---
+title: "PQS和peak取交集"
+author: "yuss"
+date: "钉钉2023-05-23"
+code path: /home/yuss/flyG4/script/001.2.PQS.intersect.R
+
+```{bash}
+预测PQS生成001.1.dmel.pqs.txt，提取有用的信息
+sed '1d' 001.1.dmel.pqs.txt|awk 'BEGIN{OFS="\t"} {print $1,$2,$3,"dmel_"NR,$5,$6}' > 001.1.dmel.pqs.bed
+复制peak文件至自己的目录下
+scp ylxiong@211.69.141.147:/home/ylxiong/G4_dm6/20230505/*/*narrowPeak /home/yuss/flyG4/result 
+pqs与peak取交集,-c显示数目0或者1，0没有交集，1有交集
+(base) yuss@ubuntu:~/flyG4/result$ bedtools intersect -a dmel.pqs.bed -b KC-G4-rep1_R1_peaks.narrowPeak -c > pqs.KCrep1_R1_peaks.bed
+(base) yuss@ubuntu:~/flyG4/result$ bedtools intersect -a dmel.pqs.bed -b KC-G4-rep2_R1_peaks.narrowPeak -c > pqs.KCrep2_R1_peaks.bed
+(base) yuss@ubuntu:~/flyG4/result$ bedtools intersect -a dmel.pqs.bed -b S2-G4-rep1_R1_peaks.narrowPeak -c > pqs.S2rep1_R1_peaks.bed
+(base) yuss@ubuntu:~/flyG4/result$ bedtools intersect -a dmel.pqs.bed -b S2-G4-rep2_R1_peaks.narrowPeak -c > pqs.S2rep2_R1_peaks.bed
+PQS和peak取交集后续分析/home/yuss/flyG4/script/001.2.PQS.intersect.R，画non_eG4,kc_specific,s2_specific,overlap,merge数量的图
+```
+
+```{r}
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "001.2."
+#读取pqs和peak交集的表
+pqs_kc_1 <- fread('/home/yuss/flyG4/result/PQS/001.2.pqs.KCrep1_R1_peaks.bed') %>% data.frame()
+pqs_kc_2 <- fread('/home/yuss/flyG4/result/PQS/001.2.pqs.KCrep2_R1_peaks.bed') %>% data.frame()
+pqs_s2_1 <- fread('/home/yuss/flyG4/result/PQS/001.2.pqs.S2rep1_R1_peaks.bed') %>% data.frame()
+pqs_s2_2 <- fread('/home/yuss/flyG4/result/PQS/001.2.pqs.S2rep2_R1_peaks.bed') %>% data.frame()
+
+#合并交集（pqs信息在前，交集信息在后）
+library(dplyr)
+pqs_peak <- bind_cols(pqs_kc_1,pqs_kc_2$V7,pqs_s2_1$V7,pqs_s2_2$V7)
+
+#修改列名
+colnames(pqs_peak) <- c("chr","start","end","id","score","strand","kc_1","kc_2","s2_1","s2_2")
+##改单个列名colnames(pqs_peak)[7] <- 'kc_1'
+
+#合并两个重复，当两个重复都有交集的时候才记作有交集
+pqs_peak$kc <- ifelse(rowSums(pqs_peak[,c("kc_1", "kc_2")])==2,1,0)
+pqs_peak$s2 <- ifelse(rowSums(pqs_peak[,c("s2_1", "s2_2")])==2,1,0)
+
+#改$s2
+pqs_peak$s2 <- ifelse(pqs_peak$s2==1,2,0)
+##修改为数字类型pqs_peak$s2 <- as.numeric(pqs_peak$s2)
+
+#求kc和s2的sum
+pqs_peak$sum <- rowSums(pqs_peak[,11:12])
+kc_specific <- pqs_peak[pqs_peak$sum==1,]
+s2_specific <- pqs_peak[pqs_peak$sum==2,]
+overlap <- pqs_peak[pqs_peak$sum==3,]
+merge <- pqs_peak[pqs_peak$sum!=0,]
+non_eG4 <-pqs_peak[pqs_peak$sum==0,]
+kc_all <- pqs_peak[pqs_peak$kc!=0,]
+s2_all <- pqs_peak[pqs_peak$s2!=0,]
+#保存
+write.table(pqs_peak,file = paste0("/home/yuss/flyG4/result/PQS/",Num,"pqs_peak.bed"),sep = '\t',
+            col.names = T,row.names = F,quote = F)
+write.table(kc_specific,file = paste0("/home/yuss/flyG4/result/PQS/",Num,"kc_specific.bed"),sep = '\t',
+            col.names = T,row.names = F,quote = F)
+write.table(s2_specific,file = paste0("/home/yuss/flyG4/result/PQS/",Num,"s2_specific.bed"),sep = '\t',
+            col.names = T,row.names = F,quote = F)
+write.table(overlap,file = paste0("/home/yuss/flyG4/result/PQS/",Num,"overlap.bed"),sep = '\t',
+            col.names = T,row.names = F,quote = F)
+write.table(merge,file = paste0("/home/yuss/flyG4/result/PQS/",Num,"merge.bed"),sep = '\t',
+            col.names = T,row.names = F,quote = F)
+write.table(non_eG4,file = paste0("/home/yuss/flyG4/result/PQS/",Num,"non_eG4.bed"),sep = '\t',
+            col.names = T,row.names = F,quote = F)
+write.table(kc_all,file = paste0("/home/yuss/flyG4/result/PQS/",Num,"kc_all.bed"),sep = '\t',
+            col.names = T,row.names = F,quote = F)
+write.table(s2_all,file = paste0("/home/yuss/flyG4/result/PQS/",Num,"s2_all.bed"),sep = '\t',
+            col.names = T,row.names = F,quote = F)
+
+#按行合并non_eG4,kc_specific,s2_specific,overlap,merge
+kc_specific$type <- "kc_specific"
+s2_specific$type <- "s2_specific"
+overlap$type <- "overlap" 
+merge$type <- "merge" 
+non_eG4$type <- "non_eG4"
+merge.all <- bind_rows(non_eG4,kc_specific,s2_specific,overlap,merge) ##bind_rows()按行合并，把表竖起来
+write.table(merge.all,file = paste0("/home/yuss/flyG4/result/PQS/",Num,"merge.all.bed"),sep = '\t',
+            col.names = T,row.names = F,quote = F)
+
+```
+#第四步韦恩图 001.4.G4CUT&Taq.intersect.G4seq.R 
+```{r}
+Num = "001.4."
+VennDiag <- euler(c("Kc167" = 5852,"S2" = 3296,"PQS" = 27515,
+                    "Kc167&PQS" = 4398, "Kc167&S2" = 23359, "PQS&S2" = 2421,
+                    "Kc167&PQS&S2" = 9583))
+p <- plot(VennDiag, counts = TRUE, font=3, cex=1, alpha=1,quantities = TRUE,lwd =3.5,
+     # labels=c("Kc167 G4-CUT&Tag","S2 G4-CUT&Tag","PQS"),
+     label.col = "white",fill="white",
+     col = c('#e48385','#4974a5','#66c2a5'))
+p
+ggsave(p, filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"KcS2PQSIntersect.pdf"),
+       device = "pdf",width = 3.8,height = 3.8)
+```
+#第五步shuffle eG4,以eG4为中心，G4 CUT&Tag信号的分布(钉钉2023-11-20)
+```{bash}
+1.构建索引:在将BAM文件转换为BigWig（.bw）文件之前，需要对BAM文件进行索引
+cd bw
+for i in `ls /home/ssyu/flyG4/result/CUTTaq.ylxiong/picard/*.bam`;do j=`basename $i`;echo "samtools index $i $i.bai" > ${j%bam}pbs;done
+for i in `ls /home/ssyu/flyG4/result/CUTTaq.ylxiong/picard/*.pbs`;do qsub -q batch -V -l nodes=1:ppn=28 $i;done
+2.转换（该数据是双端，这里需要注意的是如果是单端的序列，需要指定extendReads,默认拓展长度设置200，即不设置）
+for i in `ls /home/ssyu/flyG4/result/CUTTaq.ylxiong/picard/*.bam`;do j=`basename $i`;echo "~/miniconda3/envs/Trimgalore/bin/bamCoverage --bam $i -o /home/ssyu/flyG4/result/CUTTaq.ylxiong/bam_bw/${j%bam}bw --binSize 10 --normalizeUsing RPKM --extendReads" > ${j%bam}pbs;done
+for i in `ls /home/ssyu/flyG4/result/CUTTaq.ylxiong/bam_bw/*.pbs`;do qsub -q batch -V -l nodes=1:ppn=14 $i;done
+4.deptools的computMatrix计算信号矩阵
+/home/ssyu/miniconda3/envs/Trimgalore/bin/computeMatrix reference-point -p 28 --referencePoint center -b 2000 -a 2000 -R /home/ssyu/flyG4/data/ref/001.2.kc_all.bed /home/ssyu/flyG4/data/ref/001.2.kc_all.shuffle.sorted.bed -S KC-G4-rep1_R1.q20.marked_duplicates.bw KC-G4-rep2_R1.q20.marked_duplicates.bw --skipZeros -out /home/ssyu/flyG4/result/CUTTaq.ylxiong/bam_bw/kc_all.center.2000.CUTTag.q20bam.gz --outFileSortedRegions /home/ssyu/flyG4/result/CUTTaq.ylxiong/bam_bw/kc_all.center.2000.CUTTag.q20bam.bed
+/home/ssyu/miniconda3/envs/Trimgalore/bin/plotHeatmap -m kc_all.center.2000.CUTTag.q20bam.gz -out kc_all.center.2000.CUTTag.q20bam.pdf --heatmapHeight 15
+
+/home/ssyu/miniconda3/envs/Trimgalore/bin/computeMatrix reference-point -p 28 --referencePoint center -b 2000 -a 2000 -R /home/ssyu/flyG4/data/ref/001.2.s2_all.bed /home/ssyu/flyG4/data/ref/001.2.s2_all.shuffle.sorted.bed -S S2-G4-rep1_R1.q20.marked_duplicates.bw S2-G4-rep2_R1.q20.marked_duplicates.bw --skipZeros -out /home/ssyu/flyG4/result/CUTTaq.ylxiong/bam_bw/s2_all.center.2000.CUTTag.q20bam.gz --outFileSortedRegions /home/ssyu/flyG4/result/CUTTaq.ylxiong/bam_bw/s2_all.center.2000.CUTTag.q20bam.bed
+/home/ssyu/miniconda3/envs/Trimgalore/bin/plotHeatmap -m s2_all.center.2000.CUTTag.q20bam.gz -out s2_all.center.2000.CUTTag.q20bam.pdf --heatmapHeight 15
+```

@@ -1,0 +1,919 @@
+---
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+#第一步差异表达分析
+code path: ~/flyG4/script/010.6.Allanalysis.R
+
+```{r}
+#### 1.Kc Phen vs con DESeq2 #### 
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.6."
+readcounts_kc <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.1.kc.counts.txt") %>% as.data.frame()
+rownames(readcounts_kc) <- readcounts_kc$geneid
+readcounts_kc <- readcounts_kc[,-c(1,5:7)]
+metadata_kc <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.1.metadata_kc.txt") %>% as.data.frame()
+metadata_kc <- metadata_kc[-c(4:6),]
+metadata_kc$treat <- as.factor(metadata_kc$treat)
+library(DESeq2)
+##1.构建矩阵
+dds <- DESeqDataSetFromMatrix(countData = readcounts_kc,
+                              colData = metadata_kc,
+                              design = ~ treat)
+##2.dds标准化
+dds <- DESeq(dds)
+##3.获取标准化后的数据
+normalized_counts <- counts(dds,normalized=T)
+##4.有三个重复取平均
+normalized_mean_counts = t(apply(normalized_counts, 1, function(a){tapply(a, metadata_kc$treat, mean)}))
+
+kc.Phen <- na.omit(as.data.frame(results(dds, contrast = c("treat", "Phen","con"), cooksCutoff = FALSE))) #cooksCutoff = FALSE参数是指离群的基因不会用NA表示，之前没设置参数时，将会把离群值设为NA
+kc.Phen$con <- normalized_mean_counts[match(rownames(kc.Phen),rownames(normalized_mean_counts)), 1]
+kc.Phen$Phen <- normalized_mean_counts[match(rownames(kc.Phen),rownames(normalized_mean_counts)), 2]
+kc.Phen$group <- ifelse(kc.Phen$pvalue<0.05&abs(kc.Phen$log2FoldChange)>=0.5,ifelse(kc.Phen$log2FoldChange>0.5,"Up","Down"),"No-sig")
+table(kc.Phen$group)
+# Down No-sig     Up 
+# 211   8967    655 
+kc.Phen$geneid <- rownames(kc.Phen)
+write.table(kc.Phen,file = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/",Num,"DE.kc.Phen.txt"),
+            sep = '\t',col.names = T,row.names = F,quote = F)
+
+ggplot(kc.Phen,aes(x=log2FoldChange,y=-log10(pvalue))) +#黑白主题
+  geom_point(aes(color=group),alpha=0.5,size=2) +
+  theme_bw(base_size = 16)+
+  theme(#aspect.ratio = 1,
+    plot.title = element_text(size = 14),
+    axis.text.x = element_text(size = 10,colour = "black"),axis.title.x = element_text(size = 12),
+    axis.text.y = element_text(size = 10,colour = "black"),axis.title.y = element_text(size = 12),
+    panel.grid.major = element_blank(),  # 去除主要网格
+    panel.grid.minor = element_blank(),  # 去除次要网格
+    panel.background = element_rect(fill = "white"))+
+  scale_color_manual(name = '',
+                     values = c('Up'='#D6604D','Nosig'='grey','Down'='#74ADD1'), #手动设置颜色时调整颜色的因子顺序
+  )+
+  geom_hline(yintercept = -log10(0.05),lty = 'dashed',size = 0.8) +
+  geom_vline(xintercept = c(-0.5,0.5),lty = 'dashed',size = 0.8) +
+  annotate(geom="text", x=-3.5, y=60, size=4,label=paste0("Down\n(N=",sum(kc.Phen$group=="Down"),")"))+
+  annotate(geom="text", x=4.5, y=60, size=4,label=paste0("Up\n(N=",sum(kc.Phen$group=="Up"),")"))+
+  guides(color="none") + #图例颜色
+  ## 修改坐标轴
+  xlab(bquote(Log[2]~Fold~Change))+
+  ylab(bquote(Log[10]~P~Value(PhenDC3/DMSO))) +
+  coord_cartesian(ylim = c(0,120),xlim = c(-5,6)) + 
+  labs(title="Kc167 cell") +
+  annotate(geom = "text", x=4.7, y=115,size=4,
+           label=paste0("Total:",nrow(kc.Phen))) 
+ggsave(filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"DEKc.Phenvscon.VolcanoPlot.pdf"),
+device = "pdf",width = 4,height = 3)  
+
+
+#### 2.S2 Phen vs con DESeq2 #### 
+readcounts_s2 <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.1.s2.counts.txt") %>% as.data.frame()
+rownames(readcounts_s2) <- readcounts_s2$geneid
+readcounts_s2 <- readcounts_s2[,-c(1,5:7)]
+metadata_s2 <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.1.metadata_s2.txt") %>% as.data.frame()
+metadata_s2 <- metadata_s2[-c(4:6),]
+metadata_s2$treat <- as.factor(metadata_s2$treat)
+
+library(DESeq2)
+dds <- DESeqDataSetFromMatrix(countData = readcounts_s2,
+                              colData = metadata_s2,
+                              design = ~ treat)
+##2.dds标准化
+dds <- DESeq(dds)
+##3.获取标准化后的数据
+normalized_counts <- counts(dds,normalized=T)
+##4.有三个重复取平均
+normalized_mean_counts = t(apply(normalized_counts, 1, function(a){tapply(a, metadata_s2$treat, mean)}))
+
+s2.Phen <- na.omit(as.data.frame(results(dds, contrast = c("treat", "Phen", "con"), cooksCutoff = FALSE))) #cooksCutoff = FALSE参数是指离群的基因不会用NA表示，之前没设置参数时，将会把离群值设为NA
+s2.Phen$con <- normalized_mean_counts[match(rownames(s2.Phen),rownames(normalized_mean_counts)), 1]
+s2.Phen$Phen <- normalized_mean_counts[match(rownames(s2.Phen),rownames(normalized_mean_counts)), 2]
+s2.Phen$group <- ifelse(s2.Phen$pvalue<0.05&abs(s2.Phen$log2FoldChange)>=0.5,ifelse(s2.Phen$log2FoldChange>0.5,"Up","Down"),"No-sig")
+table(s2.Phen$group)
+# Down No-sig     Up 
+# 740   9865   1306
+s2.Phen$geneid <- rownames(s2.Phen)
+write.table(s2.Phen,file = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/",Num,"DE.s2.Phen.txt"),
+            sep = '\t',col.names = T,row.names = F,quote = F)
+
+ggplot(s2.Phen,aes(x=log2FoldChange,y=-log10(pvalue))) +#黑白主题
+  geom_point(aes(color=group),alpha=0.5,size=2) +
+  theme_bw(base_size = 16)+
+  theme(#aspect.ratio = 1,
+    plot.title = element_text(size=14), 
+    axis.text.x = element_text(size = 10,colour = "black"),axis.title.x = element_text(size = 12),
+    axis.text.y = element_text(size = 10,colour = "black"),axis.title.y = element_text(size = 12),
+    panel.grid.major = element_blank(),  # 去除主要网格
+    panel.grid.minor = element_blank(),  # 去除次要网格
+    panel.background = element_rect(fill = "white"))+
+  scale_color_manual(name = '',
+                     values = c('Up'='#BF69A9','Nosig'='grey','Down'='#8BC25F'), #手动设置颜色时调整颜色的因子顺序
+  )+
+  geom_hline(yintercept = -log10(0.05),lty = 'dashed',size = 0.8) +
+  geom_vline(xintercept = c(-0.5,0.5),lty = 'dashed',size = 0.8) +
+  annotate(geom="text", x=-4, y=100, size=4,label=paste0("Down\n(N=",sum(s2.Phen$group=="Down"),")"))+
+  annotate(geom="text", x=6, y=100, size=4,label=paste0("Up\n(N=",sum(s2.Phen$group=="Up"),")"))+
+  guides(color="none") + #图例颜色
+  ## 修改坐标轴
+  xlab(bquote(Log[2]~Fold~Change))+
+  ylab(bquote(Log[10]~P~Value(PhenDC3/DMSO))) +
+  labs(title="S2 cell") +
+  coord_cartesian(ylim = c(0,200),xlim = c(-7,10)) +
+  annotate(geom = "text", x=8, y=195,size=4,
+           label=paste0("Total:",nrow(s2.Phen))) 
+ggsave(filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"DES2.Phenvscon.VolcanoPlot.pdf"),
+       device = "pdf",width = 4,height = 3)  
+
+```
+
+
+#第二步共同上下调基因
+```{r }
+# 筛选上调的基因
+upregulated_genes <- intersect(kc.Phen$geneid[kc.Phen$group=="Up"], s2.Phen$geneid[s2.Phen$group=="Up"])
+
+# 筛选下调的基因
+downregulated_genes <- intersect(kc.Phen$geneid[kc.Phen$group=="Down"], s2.Phen$geneid[s2.Phen$group=="Down"])
+
+# 统计数量
+length(upregulated_genes) #共同上调299
+length(downregulated_genes) #34
+
+library(eulerr)
+VennDiag <- euler(c("kcup" = 356,"s2up" = 1007,
+                    "kcup&s2up" = 299))
+p <- plot(VennDiag, counts = FALSE, font=3, cex=1, alpha=1,quantities = TRUE,lwd =3.5,
+     labels=c("Kc167 Up","S2 Up"),
+     label.col = "white",fill="white",
+     col = c('#D6604D','#BF69A9'))
+p
+ggsave(p,filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"KcS2UpDEG.Intersect.pdf"),
+       device = "pdf",width = 3.8,height = 3)
+library(eulerr)
+VennDiag <- euler(c("kcdown" = 177,"s2down" = 706,
+                    "kcdown&s2down" = 34))
+p <- plot(VennDiag, counts = FALSE, font=3, cex=1, alpha=1,quantities = TRUE,lwd =3.5,
+     labels=c("Kc167 Down","S2 Down"),
+     label.col = "white",fill="white",
+     col = c('#74ADD1','#8BC25F'))
+p
+ggsave(p,filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"KcS2DownDEG.Intersect.pdf"),
+       device = "pdf",width = 3.8,height = 3)
+```
+
+#第三步差异基因和非差异基因的fisher检验
+```{r}
+#### 1.Kc fisher #### 
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.6."
+kc.Phen <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.6.DE.kc.Phen.txt") %>% as.data.frame()
+gene.kc <- fread("/home/yuss/flyG4/result/Daniel.Robert.Genetics.RNAseq/002.1.gene.kc.bed") %>% as.data.frame()
+kc.Phen$num <- gene.kc[match(kc.Phen$geneid,gene.kc$V4),7]
+kc.Phen$kc.eG4 <- ifelse(kc.Phen$num==0,"no eG4","eG4")
+
+table(kc.Phen$kc.eG4,kc.Phen$group)
+# Down No-sig   Up
+# eG4      29   2100  300
+# no eG4  182   6867  355
+# DEG eG4=29+300=329
+# DEG no eG4=182+355=537
+data <- matrix(round((c(329,2100,537,6867)),0),nrow = 2)
+fisher.test(data) # p-value < 2.2e-16
+data <- matrix(round((c(300,2100,355,6867)),0),nrow = 2)
+fisher.test(data) # p-value < 2.2e-16
+data <- matrix(round((c(29,2100,182,6867)),0),nrow = 2) #下调基因缺失eG4
+fisher.test(data) # p-value < 2.2e-16
+```
+
+
+```{r}
+#### S2 fisher####
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.6."
+s2.Phen <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.6.DE.s2.Phen.txt") %>% as.data.frame()
+gene.s2 <- fread("/home/yuss/flyG4/result/Daniel.Robert.Genetics.RNAseq/002.1.gene.s2.bed") %>% as.data.frame()
+s2.Phen$num <- gene.s2[match(s2.Phen$geneid,gene.s2$V4),7]
+s2.Phen$s2.eG4 <- ifelse(s2.Phen$num==0,"no eG4","eG4")
+table(s2.Phen$s2.eG4,s2.Phen$group)
+# Down No-sig   Up
+# eG4     253   2088  369
+# no eG4  487   7777  937
+# DEG eG4= 253+369=622
+# DEG no eG4=487+937=1424
+data <- matrix(round((c(622,2088,1424,7777)),0),nrow = 2)
+fisher.test(data) # p-value < 2.2e-16
+```
+#第四步基因和启动子上eG4的信号
+```{r}
+#### Kc基因上eG4的信号####
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.6."
+kc.Phen <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.6.DE.kc.Phen.txt") %>% as.data.frame()
+gene.kc <- fread("/home/yuss/flyG4/result/Daniel.Robert.Genetics.RNAseq/002.1.gene.kc.bed") %>% as.data.frame()
+kc.Phen$num <- gene.kc[match(kc.Phen$geneid,gene.kc$V4),7]
+kc.Phen$kc.eG4 <- ifelse(kc.Phen$num==0,"no eG4","eG4")
+
+kc.Phen$chr <- gene.kc[match(kc.Phen$geneid,gene.kc$V4),1]
+kc.Phen$start <- gene.kc[match(kc.Phen$geneid,gene.kc$V4),2]
+kc.Phen$end <- gene.kc[match(kc.Phen$geneid,gene.kc$V4),3]
+kc.Phen$length <- kc.Phen$end-kc.Phen$start
+kc.Phen$density <- kc.Phen$num/kc.Phen$length
+my_comparisons = list(c("No-sig","Down"),c("No-sig","Up"))
+library(ggpubr)
+ggplot(data = kc.Phen,aes(x=group,y=density*1000,fill=group)) +
+  geom_boxplot(notch = F,outlier.colour = "white") +
+  stat_compare_means(comparisons = my_comparisons,
+                     label.y = c(0.45,0.55),
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size=4)+
+  scale_fill_manual(name = '',
+                    values = c('Up'='#D6604D','No-sig'='grey','Down'='#74ADD1'), #手动设置颜色时调整颜色的因子顺序
+  )+
+  cowplot::theme_half_open()+
+  theme(axis.text = element_text(size = 14),
+        axis.title.y = element_text(size = 16),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab("Number of eG4 (per kb)") +
+  coord_cartesian(ylim = c(0,1)) +
+  labs(title="Kc167 cell")
+tapply(kc.Phen$density, kc.Phen$group, mean)
+# Down       No-sig           Up 
+# 4.610469e-05 7.377292e-05 1.950514e-04 
+tapply(kc.Phen$density, kc.Phen$group, median)
+
+```
+
+```{r}
+#### Kc基因的Promoter区eG4信号 ####
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.6."
+promoter.kcG4 <- fread("/home/yuss/flyG4/result/LucyCherbas.GR.2010.RNAseq/007.4.promoter2000.kc.bed") %>% as.data.frame()
+kc.Phen <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.6.DE.kc.Phen.txt") %>% as.data.frame()
+table(kc.Phen$group)
+kc.Phen$promoter.num <- promoter.kcG4[match(kc.Phen$geneid,promoter.kcG4$V4),6]
+kc.Phen$group <- factor(kc.Phen$group,levels = c("No-sig","Down","Up"))
+my_comparisons = list(c("No-sig","Down"),c("No-sig","Up"))
+ggplot(data = kc.Phen,aes(x=group,y=promoter.num,fill=group)) +
+  geom_boxplot(notch = F,outlier.colour = "white") +
+  stat_compare_means(comparisons = my_comparisons,
+                     label.y = c(3,3.5,4,4.5),
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size=4)+
+  # scale_fill_manual(values = c("#4d4d4d","#FDDBC7","#92c5de")) +
+  cowplot::theme_half_open()+
+  theme(axis.text = element_text(size = 14),
+        axis.title.y = element_text(size = 16),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab("Number of Promoter eG4") +
+  coord_cartesian(ylim = c(0,5)) +
+  scale_y_continuous(expand = c(0,0)) 
+tapply(kc.Phen$promoter.num, kc.Phen$group, mean)
+# No-sig      Down        Up 
+# 0.3038920 0.1943128 0.5221374
+
+kc.Phen$promter.numtype <- ifelse(kc.Phen$promoter.num > 0,"have","no")
+a <- as.data.frame(table(kc.Phen$group, kc.Phen$promter.numtype))
+wide_a <- spread(a, Var2, Freq)
+wide_a$sum <- wide_a$have + wide_a$no
+wide_a$have.ratio <- wide_a$have/wide_a$sum
+wide_a$no.ratio <- wide_a$no/wide_a$sum
+wide_a$Var1 <- factor(wide_a$Var1,levels = c("Down","No-sig","Up"))
+ggplot(wide_a, aes(x=Var1,y=have.ratio*100,fill=Var1)) + ##fill是图形的填充色
+  geom_bar(stat = 'identity',position = position_dodge(0.7),width = 0.7,color = 'white') + ##stat：设置统计方法,identity表示条形的高度是变量的值
+  coord_cartesian(ylim = c(0,40)) + ##坐标轴范围
+  scale_y_continuous(expand = c(0,0)) +
+  scale_fill_manual(name = '',
+                    values = c('Up'='#D6604D','No-sig'='grey','Down'='#74ADD1'), #手动设置颜色时调整颜色的因子顺序
+  )+
+  # geom_text(aes(label=have.ratio*100,vjust = -0.5),color="black", size=4) + ##柱形图上加数值标签
+  cowplot::theme_half_open() + ##主题(左下边框，没有网格线)
+  ylab("(%) Genes with eG4 in the promoter") + ##通过bquote函数给图标签添加上下标
+  geom_signif(y_position=26, xmin=1, xmax=2,
+              annotation=c("0.032"),tip_length=0)+
+  geom_signif(y_position=35, xmin=2, xmax=3,
+              annotation=c("6.69e-10"),tip_length=0)+
+  geom_signif(y_position=37.5, xmin=1, xmax=3,
+              annotation=c("7.73e-07"),tip_length=0)+
+  theme(plot.title = element_text(size = 14, face = "plain"),
+        axis.title.y = element_text(size = 14), ##y坐标轴标题字体大小
+        axis.title.x = element_blank(), ##删除x坐标轴标题
+        axis.text = element_text(size=14), ##轴文本字体大小
+        legend.position = "none") +
+  labs(title="Kc167 cell")
+ggsave(filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"KcPhenDEG.PercentagewithPromotereG4.pdf"),
+       device = "pdf",width = 3.2,height = 3.4)
+
+data <- matrix((c(2107,36,6860,175)),nrow = 2)
+fisher.test(data) #0.03194
+
+data <- matrix((c(2107,227,6860,428)),nrow = 2)
+fisher.test(data) #6.693e-10
+
+data <- matrix((c(227,36,428,175)),nrow = 2)
+fisher.test(data) #7.732e-07
+```
+
+```{r}
+#### S2基因上eG4的信号(密度) ####
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.6."
+s2.Phen <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.6.DE.s2.Phen.txt") %>% as.data.frame()
+gene.s2 <- fread("/home/yuss/flyG4/result/Daniel.Robert.Genetics.RNAseq/002.1.gene.s2.bed") %>% as.data.frame()
+s2.Phen$num <- gene.s2[match(s2.Phen$geneid,gene.s2$V4),7]
+s2.Phen$s2.eG4 <- ifelse(s2.Phen$num==0,"no eG4","eG4")
+table(s2.Phen$s2.eG4,s2.Phen$group)
+
+s2.Phen$chr <- gene.s2[match(s2.Phen$geneid,gene.s2$V4),1]
+s2.Phen$start <- gene.s2[match(s2.Phen$geneid,gene.s2$V4),2]
+s2.Phen$end <- gene.s2[match(s2.Phen$geneid,gene.s2$V4),3]
+s2.Phen$length <- s2.Phen$end-s2.Phen$start
+s2.Phen$density <- s2.Phen$num/s2.Phen$length
+
+s2.Phen$group <- factor(s2.Phen$group,levels = c("Down","No-sig","Up"))
+my_comparisons = list(c("No-sig","Down"),c("No-sig","Up"),c("Down","Up"))
+
+ggplot(data = s2.Phen,aes(x=group,y=density*1000,fill=group)) +
+  geom_boxplot(notch = F,outlier.colour = "white") +
+  stat_compare_means(comparisons = my_comparisons,
+                     label.y = c(-0.18,-0.15,-0.175),
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size=4)+
+  scale_fill_manual(name = '',
+                    values = c('Up'='#D6604D','No-sig'='grey','Down'='#74ADD1'), #手动设置颜色时调整颜色的因子顺序
+  )+
+  cowplot::theme_half_open()+
+  theme(axis.text = element_text(size = 14),
+        axis.title.y = element_text(size = 16),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab("Number of eG4 (per kb)") +
+  coord_cartesian(ylim = c(0,0.3)) +
+  labs(title="S2 cell")
+
+tapply(s2.Phen$density, s2.Phen$group, mean)
+# Down       No-sig           Up 
+# 9.318734e-05 7.480327e-05 1.434526e-04
+```
+
+```{r}
+#### S2基因的Promoter区eG4的信号 ####
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.6."
+promoter.s2G4 <- fread("/home/yuss/flyG4/result/LucyCherbas.GR.2010.RNAseq/007.4.promoter2000.s2.bed") %>% as.data.frame()
+s2.Phen <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.6.DE.s2.Phen.txt") %>% as.data.frame()
+table(s2.Phen$group)
+s2.Phen$promoter.num <- promoter.s2G4[match(s2.Phen$geneid,promoter.s2G4$V4),6]
+s2.Phen$group <- factor(s2.Phen$group,levels = c("Down","No-sig","Up"))
+my_comparisons = list(c("No-sig","Down"),c("No-sig","Up"))
+ggplot(data = s2.Phen,aes(x=group,y=promoter.num,fill=group)) +
+  geom_boxplot(notch = F,outlier.colour = "white") +
+  stat_compare_means(comparisons = my_comparisons,
+                     label.y = c(3,3.5,4,4.5),
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size=4)+
+  # scale_fill_manual(values = c("#4d4d4d","#FDDBC7","#92c5de")) +
+  cowplot::theme_half_open()+
+  theme(axis.text = element_text(size = 14),
+        axis.title.y = element_text(size = 16),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab("Number of Promoter eG4") +
+  coord_cartesian(ylim = c(0,10)) +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(title="S2 cell")
+tapply(s2.Phen$promoter.num, s2.Phen$group, mean)
+# Down    No-sig        Up 
+# 0.3297297 0.3049164 0.4127106
+
+s2.Phen$promter.numtype <- ifelse(s2.Phen$promoter.num > 0,"have","no")
+a <- as.data.frame(table(s2.Phen$group, s2.Phen$promter.numtype))
+wide_a <- spread(a, Var2, Freq)
+wide_a$sum <- wide_a$have + wide_a$no
+wide_a$have.ratio <- wide_a$have/wide_a$sum
+wide_a$no.ratio <- wide_a$no/wide_a$sum
+
+
+ggplot(wide_a, aes(x=Var1,y=have.ratio*100,fill=Var1)) + ##fill是图形的填充色
+  geom_bar(stat = 'identity',position = position_dodge(0.7),width = 0.7,color = 'white') + ##stat：设置统计方法,identity表示条形的高度是变量的值
+  coord_cartesian(ylim = c(0,40)) + ##坐标轴范围
+  scale_y_continuous(expand = c(0,0)) +
+  scale_fill_manual(name = '',
+                    values = c('Up'='#BF69A9','No-sig'='grey','Down'='#8BC25F'), #手动设置颜色时调整颜色的因子顺序
+  )+
+  cowplot::theme_half_open() + ##主题(左下边框，没有网格线)
+  ylab("(%) Gene with eG4 in the promoter") + ##通过bquote函数给图标签添加上下标
+  geom_signif(y_position=25, xmin=1, xmax=2,
+              annotation=c("0.649"),tip_length=0)+
+  geom_signif(y_position=35, xmin=1, xmax=3,
+              annotation=c("0.008"),tip_length=0)+
+  geom_signif(y_position=31, xmin=2, xmax=3,
+              annotation=c("1.73e-06"),tip_length=0)+
+  theme(plot.title = element_text(size = 14, face = "plain"),
+        axis.title.y = element_text(size = 14), ##y坐标轴标题字体大小
+        axis.title.x = element_blank(), ##删除x坐标轴标题
+        axis.text = element_text(size=14), ##轴文本字体大小
+        legend.position = "none") +
+  labs(title="S2 cell")
+ggsave(filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"s2PhenDEG.PercentagewithPromotereG4.pdf"),
+       device = "pdf",width = 3.2,height = 3.4)
+wide_a
+data <- matrix((c(172,2224,568,7641)),nrow = 2)
+fisher.test(data) # p-value =0.6489
+data <- matrix((c(374,2224,932,7641)),nrow = 2)
+fisher.test(data) # p-value =1.732e-06
+data <- matrix((c(172,374,568,932)),nrow = 2)
+fisher.test(data) # p-value =0.008012
+```
+#第五步含有eG4和不含eG4 log2Fc
+```{r}
+#*差异倍数 log2FC---------------------------------------------------------------------------
+#### 1.Kc 基因含有eG4和no eG4差异倍数  ####
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.6."
+kc.Phen <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.6.DE.kc.Phen.txt") %>% as.data.frame()
+gene.kc <- fread("/home/yuss/flyG4/result/Daniel.Robert.Genetics.RNAseq/002.1.gene.kc.bed") %>% as.data.frame()
+kc.Phen$num <- gene.kc[match(kc.Phen$geneid,gene.kc$V4),7]
+kc.Phen$kc.eG4 <- ifelse(kc.Phen$num==0,"no eG4","eG4")
+kc.Phen$kc.eG4 <- factor(kc.Phen$kc.eG4,levels = c("no eG4","eG4"))
+
+my_comparisons = list(c("eG4","no eG4"))
+ggplot(data = kc.Phen,aes(x=kc.eG4,y=log2FoldChange,fill=kc.eG4,color=kc.eG4)) +
+  geom_violin(position = position_dodge(width = 1), scale = 'width') +
+  geom_boxplot(position = position_dodge(width = 1), outlier.size = 0.6, width = 0.2,
+               show.legend = FALSE) +
+  stat_compare_means(comparisons = my_comparisons,
+                     label.y = c(5,5),
+ tip.length = 0,size=4)+
+  coord_cartesian(ylim = c(-3,6)) +
+  scale_fill_manual(values = c("#818181","#D08725")) +
+  scale_color_manual(values = c("#5b5b5b","#8f5d19")) +
+  theme_bw()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 10,colour = "black"),
+        axis.title.y = element_text(size = 12),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab(bquote(Log[2](PhenDC3/DMSO))) +
+  labs(title="Kc167 cell") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  scale_x_discrete(labels = c("without eG4","eG4"))
+ggsave(filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"KcPhenlogFC.witheG4noeG4.pdf"),
+       device = "pdf",width = 2.7,height = 2.7)
+
+tapply(kc.Phen$log2FoldChange,kc.Phen$kc.eG4, mean)
+tapply(kc.Phen$log2FoldChange,kc.Phen$kc.eG4, median)
+
+sample_data <- kc.Phen[kc.Phen$kc.eG4=="eG4",2]
+# 单样本Wilcoxon检验(看大于0是否有显著性)
+wilcox.test(sample_data, mu = 0,alternative = "greater")
+sample_data <- kc.Phen[kc.Phen$kc.eG4=="no eG4",2]
+# 单样本Wilcoxon检验(看小于0是否有显著性)
+wilcox.test(sample_data, mu = 0,alternative = "less") #p-value < 2.2e-16
+```
+
+```{r}
+#### 2.Kc 启动子含有eG4和no eG4差异倍数 ####
+rm(list = ls());gc();rm(list = ls())
+Num = "010.6."
+promoter.kcG4 <- fread("/home/yuss/flyG4/result/LucyCherbas.GR.2010.RNAseq/007.4.promoter2000.kc.bed") %>% as.data.frame()
+kc.Phen <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.6.DE.kc.Phen.txt") %>% as.data.frame()
+kc.Phen$pro.num <- promoter.kcG4[match(kc.Phen$geneid,promoter.kcG4$V4),6]
+kc.Phen$kc.eG4 <- ifelse(kc.Phen$pro.num==0,"no eG4","eG4")
+kc.Phen$kc.eG4 <- factor(kc.Phen$kc.eG4,levels = c("no eG4","eG4"))
+
+my_comparisons = list(c("eG4","no eG4"))
+ggplot(data = kc.Phen,aes(x=kc.eG4,y=log2FoldChange,fill=kc.eG4,color=kc.eG4)) +
+  geom_violin(position = position_dodge(width = 1), scale = 'width') +
+  geom_boxplot(position = position_dodge(width = 1), outlier.size = 0.6, width = 0.2, show.legend = FALSE) +
+  stat_compare_means(comparisons = my_comparisons,
+                     label.y = c(5,5),
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size=4)+
+  coord_cartesian(ylim = c(-3,6)) +
+  scale_fill_manual(values = c("#818181","#D08725")) +
+  scale_color_manual(values = c("#5b5b5b","#8f5d19")) +
+  theme_bw()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 10,colour = "black"),
+        axis.title.y = element_text(size = 12),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab(bquote(Log[2](PhenDC3/DMSO))) +
+  labs(title="Kc167 cell (Promoter eG4)") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  scale_x_discrete(labels = c("without eG4","eG4"))
+ggsave(filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"KcPhenlogFC.withPromotereG4noeG4.pdf"),
+       device = "pdf",width = 2.7,height = 2.7)
+
+tapply(kc.Phen$log2FoldChange,kc.Phen$kc.eG4, mean)
+tapply(kc.Phen$log2FoldChange,kc.Phen$kc.eG4, median)
+
+# 单样本Wilcoxon检验(看大于0是否有显著性)
+sample_data <- kc.Phen[kc.Phen$kc.eG4=="eG4",2]
+wilcox.test(sample_data, mu = 0,alternative = "greater") #p-value = 2.7e-16
+# 单样本Wilcoxon检验(看小于0是否有显著性)
+sample_data <- kc.Phen[kc.Phen$kc.eG4=="no eG4",2]
+wilcox.test(sample_data, mu = 0,alternative = "less") #p-value = 0.001124
+```
+
+```{r}
+#### 3.S2 基因含有eG4和no eG4差异倍数  ####
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.6."
+s2.Phen <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.6.DE.s2.Phen.txt") %>% as.data.frame()
+gene.s2 <- fread("/home/yuss/flyG4/result/Daniel.Robert.Genetics.RNAseq/002.1.gene.s2.bed") %>% as.data.frame()
+s2.Phen$num <- gene.s2[match(s2.Phen$geneid,gene.s2$V4),7]
+s2.Phen$s2.eG4 <- ifelse(s2.Phen$num==0,"no eG4","eG4")
+s2.Phen$s2.eG4 <- factor(s2.Phen$s2.eG4,levels = c("no eG4","eG4"))
+my_comparisons = list(c("eG4","no eG4"))
+ggplot(data = s2.Phen,aes(x=s2.eG4,y=log2FoldChange,fill=s2.eG4,color=s2.eG4)) +
+  geom_violin(position = position_dodge(width = 1), scale = 'width') +
+  geom_boxplot(position = position_dodge(width = 1), outlier.size = 0.6, width = 0.2, show.legend = FALSE) +
+  stat_compare_means(comparisons = my_comparisons,
+                     label.y = c(8.5,5),
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size=4)+
+  coord_cartesian(ylim = c(-5,10)) +
+  scale_fill_manual(values = c("#818181","#D08725")) +
+  scale_color_manual(values = c("#5b5b5b","#8f5d19")) +
+  theme_bw()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 10,colour = "black"),
+        axis.title.y = element_text(size = 12),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab(bquote(Log[2](PhenDC3/DMSO))) +
+  labs(title="S2 cell") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  scale_x_discrete(labels = c("without eG4","eG4"))
+ggsave(filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"S2PhenlogFC.witheG4noeG4.pdf"),
+       device = "pdf",width = 2.7,height = 2.7)
+
+tapply(s2.Phen$log2FoldChange,s2.Phen$s2.eG4, mean)
+tapply(s2.Phen$log2FoldChange,s2.Phen$s2.eG4, median)
+
+sample_data <- s2.Phen[s2.Phen$s2.eG4=="eG4",2]
+# 单样本Wilcoxon检验(看大于0是否有显著性)
+wilcox.test(sample_data, mu = 0,alternative = "greater") #p-value = 1.049e-13
+sample_data <- s2.Phen[s2.Phen$s2.eG4=="no eG4",2]
+# 单样本Wilcoxon检验(看小于0是否有显著性)
+wilcox.test(sample_data, mu = 0,alternative = "greater") #p-value = 1.423e-12 显著大于0
+
+```
+
+```{r}
+#### 4.S2 启动子含有eG4和no eG4差异倍数  ####
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.6."
+s2.Phen <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.6.DE.s2.Phen.txt") %>% as.data.frame()
+promoter.s2G4 <- fread("/home/yuss/flyG4/result/LucyCherbas.GR.2010.RNAseq/007.4.promoter2000.s2.bed") %>% as.data.frame()
+s2.Phen$pro.num <- promoter.s2G4[match(s2.Phen$geneid,promoter.s2G4$V4),6]
+s2.Phen$s2.eG4 <- ifelse(s2.Phen$pro.num==0,"no eG4","eG4")
+s2.Phen$s2.eG4 <- factor(s2.Phen$s2.eG4,levels = c("no eG4","eG4"))
+my_comparisons = list(c("eG4","no eG4"))
+ggplot(data = s2.Phen,aes(x=s2.eG4,y=log2FoldChange,fill=s2.eG4,color=s2.eG4)) +
+  geom_violin(position = position_dodge(width = 1), scale = 'width') +
+  geom_boxplot(position = position_dodge(width = 1), outlier.size = 0.6, width = 0.2, show.legend = FALSE) +
+  stat_compare_means(comparisons = my_comparisons,
+                     label.y = c(8.5,5),
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size=4)+
+  coord_cartesian(ylim = c(-5,10)) +
+  scale_fill_manual(values = c("#818181","#D08725")) +
+  scale_color_manual(values = c("#5b5b5b","#8f5d19")) +
+  theme_bw()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 10,colour = "black"),
+        axis.title.y = element_text(size = 12),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab(bquote(Log[2](PhenDC3/DMSO))) +
+  labs(title="S2 cell (Promter eG4)") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  scale_x_discrete(labels = c("without eG4","eG4"))
+ggsave(filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"S2PhenlogFC.withPromotereG4noeG4.pdf"),
+       device = "pdf",width = 2.7,height = 2.7)
+
+tapply(s2.Phen$log2FoldChange,s2.Phen$s2.eG4, mean)
+tapply(s2.Phen$log2FoldChange,s2.Phen$s2.eG4, median)
+
+sample_data <- s2.Phen[s2.Phen$s2.eG4=="eG4",2]
+# 单样本Wilcoxon检验(看大于0是否有显著性)
+wilcox.test(sample_data, mu = 0,alternative = "greater") #p-value < 2.2e-16 显著大于0
+sample_data <- s2.Phen[s2.Phen$s2.eG4=="no eG4",2]
+# 单样本Wilcoxon检验(看小于0是否有显著性)
+wilcox.test(sample_data, mu = 0,alternative = "greater") #p-value = 6.303e-09 显著大于0
+```
+#第六步GO、KEGG富集分析
+```{r}
+#*含有eG4的基因GO KEGG---------------------------------------------------------------------
+#### 1.Kc 上下调GOKEGG计算准备 ####
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.6."
+library(clusterProfiler)
+library(HDO.db)
+library(DOSE)
+library(dplyr)
+library(data.table)
+
+kc.Phen <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.6.DE.kc.Phen.txt") %>% as.data.frame()
+gene.kc <- fread("/home/yuss/flyG4/result/Daniel.Robert.Genetics.RNAseq/002.1.gene.kc.bed") %>% as.data.frame()
+kc.Phen$num <- gene.kc[match(kc.Phen$geneid,gene.kc$V4),7]
+kc.Phen$kc.eG4 <- ifelse(kc.Phen$num==0,"no eG4","eG4")
+df <- kc.Phen[kc.Phen$group=="Up",] ##655
+df <- kc.Phen[kc.Phen$group=="Up"&kc.Phen$kc.eG4=="eG4",] ##300
+kcPhenup <- unlist(df$geneid)
+
+##富集分析
+library(org.Dm.eg.db)
+enrich_go_kegg<-function(gene_id){
+  result<-list()
+  ensembl_2_entrezid<-bitr(gene_id,fromType ="ENSEMBL", toType = c("ENTREZID","SYMBOL"), OrgDb = org.Dm.eg.db)
+  ego_ALL <- enrichGO(gene = as.character(ensembl_2_entrezid$ENTREZID),
+                      OrgDb=org.Dm.eg.db,
+                      keyType = "ENTREZID",
+                      ont = "ALL",
+                      pAdjustMethod = "BH",
+                      minGSSize = 1,
+                      pvalueCutoff = 0.05,
+                      qvalueCutoff = 0.05,
+                      readable = TRUE)
+  result$ego_all<-as.data.frame(ego_ALL)
+  ensembl_2_kegg_id<-bitr_kegg(ensembl_2_entrezid$ENTREZID,fromType = "ncbi-geneid",toType = "kegg",organism = "dme")
+  kegg<-enrichKEGG(gene = ensembl_2_entrezid$ENTREZID,organism = "dme", keyType = "ncbi-geneid",pAdjustMethod = "BH",pvalueCutoff = 0.05,qvalueCutoff = 0.05)
+  result$kegg<-kegg@result
+  result$ego_ALL<-ego_ALL
+  return(result)
+}
+
+enrich_kcPhenup <- enrich_go_kegg(kcPhenup)
+enrich_kcPhenup_ego <- enrich_kcPhenup$ego_all
+enrich_kcPhenup_kegg <- enrich_kcPhenup$kegg
+enrich_kcPhenup_ego_ALL <- enrich_kcPhenup$ego_ALL
+#### 2.Kc 上调GO可视化 ####
+##特定的一些GO_BP
+eGoBP <- subset(enrich_kcPhenup_ego,enrich_kcPhenup_ego$Description%in%c("cell morphogenesis involved in neuron differentiation","positive regulation of transcription by RNA polymerase II",
+                                         "positive regulation of transcription, DNA-templated","circadian rhythm","G protein-coupled receptor signaling pathway",
+                                         "ovarian follicle cell development","autophagy","positive regulation of macromolecule biosynthetic process","synapse assembly","potassium ion transmembrane transport"
+))
+plot_Phen <- eGoBP
+
+#### 3.Kc 下调GO可视化 ####
+##down
+df <- kc.Phen[kc.Phen$group=="Down",] #211
+df <- kc.Phen[kc.Phen$group=="Down"&kc.Phen$kc.eG4=="eG4",] ##29
+kcPhendown <- unlist(df$geneid)
+enrich_kcPhendown <- enrich_go_kegg(kcPhendown)
+enrich_kcPhendown_ego <- enrich_kcPhendown$ego_all
+enrich_kcPhendown_kegg <- enrich_kcPhendown$kegg
+enrich_kcPhendown_ego_ALL <- enrich_kcPhendown$ego_ALL
+eGoBP <- subset(enrich_kcPhendown_ego,enrich_kcPhendown_ego$Description%in%c("regulation of DNA replication","activation of protein kinase activity","regulation of phosphorylation",
+                                                                             "hemoglobin metabolic process","hemoglobin biosynthetic process","regulation of guanylate cyclase activity","cellular response to anoxia","regulation of mitotic cell cycle",
+                                                                             "positive regulation of cellular protein metabolic process","ketone body catabolic process"
+))
+plot_DMSO <- eGoBP
+#### 上下调GO ####
+eGoBP_Phen_DMSO_plot<-rbind(plot_Phen,plot_DMSO)
+eGoBP_Phen_DMSO_plot$WrappedDescription <- str_wrap(eGoBP_Phen_DMSO_plot$Description, width = 57)  # 设置每行最多显示15个字符
+enrich_kcPhenup_ego$Group="PhenDC3"
+enrich_kcPhendown_ego$Group="DMSO"
+eGoBP_plot<-rbind(enrich_kcPhenup_ego,enrich_kcPhendown_ego)%>%filter(Description%in%c("cell morphogenesis involved in neuron differentiation","positive regulation of transcription by RNA polymerase II",
+                                                                                       "positive regulation of transcription, DNA-templated","circadian rhythm","G protein-coupled receptor signaling pathway",
+                                                                                       "ovarian follicle cell development","autophagy","positive regulation of macromolecule biosynthetic process","synapse assembly","potassium ion transmembrane transport",
+                                                                                       "regulation of DNA replication","activation of protein kinase activity","regulation of phosphorylation",
+                                                                                       "hemoglobin metabolic process","hemoglobin biosynthetic process","regulation of guanylate cyclase activity","cellular response to anoxia","regulation of mitotic cell cycle",
+                                                                                       "positive regulation of cellular protein metabolic process","ketone body catabolic process"))
+eGoBP_plot$Description=factor(eGoBP_plot$Description,levels = unique(eGoBP_Phen_DMSO_plot$Description)[20:1])
+eGoBP_plot$WrappedDescription <- str_wrap(eGoBP_plot$Description, width = 57)  # 设置每行最多显示15个字符
+eGoBP_plot$WrappedDescription=factor(eGoBP_plot$WrappedDescription,levels = unique(eGoBP_Phen_DMSO_plot$WrappedDescription)[20:1])
+ggplot()+
+  geom_point(data=eGoBP_plot[eGoBP_plot$pvalue<0.05,],aes(y=WrappedDescription,x=Group,color=pvalue,size=Count))+
+  geom_point(data=eGoBP_plot[eGoBP_plot$pvalue>0.05,],aes(y=WrappedDescription,x=Group),color="grey",size=1)+
+  scale_colour_gradient(low = "purple", high = "yellow", na.value = NA)+
+  xlab("")+
+  ylab("")+
+  theme_minimal()+
+  labs(color="Pvalue",size="Count")+
+  theme(# 标题居中
+    plot.title = element_text(hjust = 0.8,vjust = 1.5,size = 15,face = "bold"),
+    axis.text = element_text(color = 'black',size=12,face = "plain"),
+    axis.title.x  = element_text(color = 'black',size=12,face = "plain"),
+    axis.title = element_text(color = 'black'),
+    axis.title.y   = element_text(color = 'black',size=12,face = "plain"),
+    legend.text = element_text(size=12,face = "plain"),
+    legend.title = element_text(size=12,face = "plain"))+
+  ggtitle("GO enrichment (BP) in Kc167 cell - PhenDC3 vs DMSO")
+ggsave(filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"KcPhenUpDownGO_BP.pdf"),
+       device = "pdf",width = 7.3,height = 6)
+
+#### 4.Kc 上调KEGG可视化 ####
+enrich_kcPhenup_kegg <- arrange(enrich_kcPhenup_kegg, enrich_kcPhenup_kegg$p.adjust)
+enrich_kcPhenup_kegg$Description1 <- sapply(strsplit(enrich_kcPhenup_kegg$Description, " - "), function(x) x[1])
+
+#### 5.Kc 下调KEGG可视化 ####
+enrich_kcPhendown_kegg <- arrange(enrich_kcPhendown_kegg, enrich_kcPhendown_kegg$p.adjust)
+enrich_kcPhendown_kegg$Description1 <- sapply(strsplit(enrich_kcPhendown_kegg$Description, " - "), function(x) x[1])
+
+#### 6.Kc 上下调KEGG可视化 ####
+kcupkegg <- enrich_kcPhenup_kegg[c(1,3:7), ] %>%
+  mutate(Group = "PhenDC3 Up") %>%
+  mutate(log10p = -log10(pvalue))
+
+kcdownkegg <- enrich_kcPhendown_kegg[c(1:3), ] %>%
+  mutate(Group = "PhenDC3 Down") %>%
+  mutate(log10p = log10(pvalue))
+
+kckegg <-rbind(kcupkegg,kcdownkegg)
+kckegg$Description1[1] <- "Hippo signaling pathway - multiple species"
+kckegg$Description1[5] <- "Hippo signaling pathway - fly"
+kckegg$Description1=factor(kckegg$Description1,levels = kckegg$Description1[c(7:9,6:1)])
+
+ggplot(kckegg,aes(x=log10p,y=Description1,fill=Group))+
+  geom_col(width = 0.7)+
+  theme_classic()+
+  theme(axis.title =element_text(size = 12,face = "plain", color = 'black'),axis.text =element_text(size = 12,face = "bold", color = 'black'))+	
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        panel.border = element_blank(),
+        legend.title = element_text(color="black",size=13,face = "plain"),
+        legend.position = "top",
+        legend.text = element_text(size=13,face = "plain"),
+        axis.text = element_text(color="black",size=12,face = "plain"),
+        axis.line.x = element_line(color='black'),
+        axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        plot.title = element_text(size=14,face = "bold"))+
+  ylab("")+
+  geom_text(data = kckegg[which(kckegg$log10p>0),],aes(x=-0.01, y=Description1, label=Description1),
+            hjust=1, size=4,color="black") +
+  geom_text(data = kckegg[which(kckegg$log10p<0),],aes(x=0.01, y=Description1, label=Description1),
+            hjust=0, size=4,color="black")+
+  scale_fill_manual(values = c(
+    'PhenDC3 Up'="#D6604D",
+    'PhenDC3 Down'="#74ADD1"))+
+  labs(x='-log(Pvalue)', y='')+
+  ggtitle("Kc167 cell - PhenDC3 vs DMSO")
+ggsave(filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"eG4.KcPhenUpDown.KEGG.pdf"),
+       device = "pdf",width = 7.5,height = 4.8)
+
+```
+```{r}
+#### 1.S2 上下调GOKEGG计算准备 ####
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.6."
+library(clusterProfiler)
+library(HDO.db)
+library(DOSE)
+library(dplyr)
+library(data.table)
+
+s2.Phen <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.6.DE.s2.Phen.txt") %>% as.data.frame()
+gene.s2 <- fread("/home/yuss/flyG4/result/Daniel.Robert.Genetics.RNAseq/002.1.gene.s2.bed") %>% as.data.frame()
+s2.Phen$num <- gene.s2[match(s2.Phen$geneid,gene.s2$V4),7]
+s2.Phen$s2.eG4 <- ifelse(s2.Phen$num==0,"no eG4","eG4")
+s2.Phen$s2.eG4 <- factor(s2.Phen$s2.eG4,levels = c("no eG4","eG4"))
+df <- s2.Phen[s2.Phen$group=="Up",] ##1306
+df <- s2.Phen[s2.Phen$group=="Up"&s2.Phen$s2.eG4=="eG4",] ##369
+s2Phenup <- unlist(df$geneid)
+##富集分析
+library(org.Dm.eg.db)
+enrich_go_kegg<-function(gene_id){
+  result<-list()
+  ensembl_2_entrezid<-bitr(gene_id,fromType ="ENSEMBL", toType = c("ENTREZID","SYMBOL"), OrgDb = org.Dm.eg.db)
+  ego_ALL <- enrichGO(gene = as.character(ensembl_2_entrezid$ENTREZID),
+                      OrgDb=org.Dm.eg.db,
+                      keyType = "ENTREZID",
+                      ont = "ALL",
+                      pAdjustMethod = "BH",
+                      minGSSize = 1,
+                      pvalueCutoff = 0.05,
+                      qvalueCutoff = 0.05,
+                      readable = TRUE)
+  result$ego_all<-as.data.frame(ego_ALL)
+  ensembl_2_kegg_id<-bitr_kegg(ensembl_2_entrezid$ENTREZID,fromType = "ncbi-geneid",toType = "kegg",organism = "dme")
+  kegg<-enrichKEGG(gene = ensembl_2_entrezid$ENTREZID,organism = "dme", keyType = "ncbi-geneid",pAdjustMethod = "BH",pvalueCutoff = 0.05,qvalueCutoff = 0.05)
+  result$kegg<-kegg@result
+  result$ego_ALL<-ego_ALL
+  return(result)
+}
+
+enrich_s2Phenup <- enrich_go_kegg(s2Phenup)
+enrich_s2Phenup_ego <- enrich_s2Phenup$ego_all
+enrich_s2Phenup_kegg <- enrich_s2Phenup$kegg
+enrich_s2Phenup_ego_ALL <- enrich_s2Phenup$ego_ALL
+
+#### 2.S2 上调GO可视化 ####
+##特定的一些GO_BP  
+eGoBP <- subset(enrich_s2Phenup_ego,enrich_s2Phenup_ego$Description%in%c("negative regulation of transcription by RNA polymerase II","cell morphogenesis involved in differentiation","eye development",
+                                                                         "male genitalia development","synapse assembly","male sex differentiation","positive regulation of transcription, DNA-templated","growth",
+                                                                         "positive regulation of macromolecule biosynthetic process","potassium ion transmembrane transport"
+))
+plot_Phen <- eGoBP
+
+#### 3.S2 下调GO可视化####
+##down
+df <- s2.Phen[s2.Phen$group=="Down",] ##740
+df <- s2.Phen[s2.Phen$group=="Down"&s2.Phen$s2.eG4=="eG4",] ##253
+s2Phendown <- unlist(df$geneid)
+
+##富集分析
+enrich_s2Phendown <- enrich_go_kegg(s2Phendown)
+enrich_s2Phendown_ego <- enrich_s2Phendown$ego_all
+enrich_s2Phendown_kegg <- enrich_s2Phendown$kegg
+enrich_s2Phendown_ego_ALL <- enrich_s2Phendown$ego_ALL
+eGoBP <- subset(enrich_s2Phendown_ego,enrich_s2Phendown_ego$Description%in%c("cell adhesion","axon guidance","sex differentiation","gonad development","positive regulation of cell cycle process",
+                                                                             "negative regulation of cell differentiation",
+                                         "regulation of fibroblast growth factor receptor signaling pathway","neuron recognition",
+                                         "regulation of phosphorylation","immune response","regulation of DNA replication"
+                                         ))
+plot_DMSO <- eGoBP
+
+eGoBP_Phen_DMSO_plot<-rbind(plot_Phen,plot_DMSO)
+eGoBP_Phen_DMSO_plot$WrappedDescription <- str_wrap(eGoBP_Phen_DMSO_plot$Description, width = 57)  # 设置每行最多显示15个字符
+enrich_s2Phenup_ego$Group="PhenDC3"
+enrich_s2Phendown_ego$Group="DMSO"
+eGoBP_plot<-rbind(enrich_s2Phenup_ego,enrich_s2Phendown_ego)%>%filter(Description%in%c("negative regulation of transcription by RNA polymerase II","cell morphogenesis involved in differentiation","eye development",
+                                                                                       "male genitalia development","synapse assembly","male sex differentiation","positive regulation of transcription, DNA-templated","growth",
+                                                                                       "positive regulation of macromolecule biosynthetic process","potassium ion transmembrane transport",
+                                                                                       "cell adhesion","axon guidance","sex differentiation","gonad development","positive regulation of cell cycle process",
+                                                                                       "negative regulation of cell differentiation",
+                                                                                       "regulation of fibroblast growth factor receptor signaling pathway","neuron recognition",
+                                                                                       "regulation of phosphorylation","immune response","regulation of DNA replication"))%>%filter(!(GeneRatio %in% c("41/217", "26/217", "24/217", "12/217")))
+eGoBP_plot$WrappedDescription <- str_wrap(eGoBP_plot$Description, width = 57)  # 设置每行最多显示15个字符
+eGoBP_plot$WrappedDescription=factor(eGoBP_plot$WrappedDescription,levels = unique(eGoBP_Phen_DMSO_plot$WrappedDescription)[20:1])
+ggplot()+
+  geom_point(data=eGoBP_plot[eGoBP_plot$pvalue<0.05,],aes(y=WrappedDescription,x=Group,color=pvalue,size=Count))+
+  geom_point(data=eGoBP_plot[eGoBP_plot$pvalue>0.05,],aes(y=WrappedDescription,x=Group),color="grey",size=1)+
+  scale_colour_gradient(low = "purple", high = "yellow", na.value = NA)+
+  xlab("")+
+  ylab("")+
+  theme_minimal()+
+  labs(color="Pvalue",size="Count")+
+  theme(# 标题居中
+    plot.title = element_text(hjust = 0.8,vjust = 1.5,size = 15,face = "bold"),
+    axis.text = element_text(color = 'black',size=12,face = "plain"),
+    axis.title.x  = element_text(color = 'black',size=12,face = "plain"),
+    axis.title = element_text(color = 'black'),
+    axis.title.y   = element_text(color = 'black',size=12,face = "plain"),
+    legend.text = element_text(size=12,face = "plain"),
+    legend.title = element_text(size=12,face = "plain"))+
+  ggtitle("GO enrichment (BP) in S2 cell - PhenDC3 vs DMSO")
+ggsave(filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"S2PhenUpDownGO_BP.pdf"),
+       device = "pdf",width = 7.9,height = 6)
+
+
+#### 4.S2 上调KEGG可视化####
+enrich_s2Phenup_kegg <- arrange(enrich_s2Phenup_kegg, enrich_s2Phenup_kegg$p.adjust)
+enrich_s2Phenup_kegg$Description1 <- sapply(strsplit(enrich_s2Phenup_kegg$Description, " - "), function(x) x[1])
+
+#### 5.S2 下调KEGG可视化####
+enrich_s2Phendown_kegg <- arrange(enrich_s2Phendown_kegg, enrich_s2Phendown_kegg$p.adjust)
+enrich_s2Phendown_kegg$Description1 <- sapply(strsplit(enrich_s2Phendown_kegg$Description, " - "), function(x) x[1])
+
+#### 6.S2 上下调KEGG可视化####  
+s2upkegg <- enrich_s2Phenup_kegg[c(1:2,4:6), ] %>%
+  mutate(Group = "PhenDC3 Up") %>%
+  mutate(log10p = -log10(pvalue))
+s2upkegg$Description1[1] <- "Hippo signaling pathway - multiple species"
+s2upkegg$Description1[5] <- "Hippo signaling pathway - fly"
+s2downkegg <- enrich_s2Phendown_kegg[c(1:9), ] %>%
+  mutate(Group = "PhenDC3 Down") %>%
+  mutate(log10p = log10(pvalue))
+
+s2kegg <-rbind(s2upkegg,s2downkegg)
+
+s2kegg$Description1=factor(s2kegg$Description1,s2kegg$Description1[c(6:14,5:1)])
+ggplot(s2kegg,aes(x=log10p,y=Description1,fill=Group))+
+  geom_col(width = 0.7)+
+  theme_classic()+
+  theme(axis.title =element_text(size = 12,face = "plain", color = 'black'),axis.text =element_text(size = 12,face = "bold", color = 'black'))+	
+  theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        panel.border = element_blank(),
+        legend.title = element_text(color="black",size=13,face = "plain"),
+        legend.position = "top",
+        legend.text = element_text(size=13,face = "plain"),
+        axis.text = element_text(color="black",size=12,face = "plain"),
+        axis.line.x = element_line(color='black'),
+        axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        plot.title = element_text(size=14,face = "bold"))+
+  ylab("")+
+  geom_text(data = s2kegg[which(s2kegg$log10p>0),],aes(x=-0.01, y=Description1, label=Description1),
+            hjust=1, size=4,color="black") +
+  geom_text(data = s2kegg[which(s2kegg$log10p<0),],aes(x=0.01, y=Description1, label=Description1),
+            hjust=0, size=4,color="black")+
+  scale_fill_manual(values = c(
+    'PhenDC3 Up'="#BF69A9",
+    'PhenDC3 Down'="#8BC25F"))+
+  labs(x='-log(Pvalue)', y='')+
+  ggtitle("S2 cell - PhenDC3 vs DMSO")
+ggsave(filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"eG4.S2PhenUpDown.KEGG.pdf"),
+       device = "pdf",width = 6.2,height = 5.5)
+```
+

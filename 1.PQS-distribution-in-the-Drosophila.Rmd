@@ -1,0 +1,528 @@
+---
+title: "20种果蝇基因组的PQS预测"
+author: "yuss"
+date: "2024-04-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#3.1果蝇基因组中的PQS分布研究
+
+#第一步20种果蝇基因组的PQS预测
+
+#1.复制钱师兄下载的20种果蝇的参考基因组
+```{bash}
+#(base) yuss@ubuntu:~/flyG4/data/Drosophila_genome$ cp /home/qians/G4/Drosophila/genome/D*/*.fna ./
+```
+
+#2.生成score>50的bed
+```{r}
+rm(list = ls());gc();rm(list = ls())
+Num = "009.1."
+library(tidyverse)
+library(pqsfinder)
+library(Biostrings)
+#a输入基因组序列fa文件路径，b输出pqsbed文件路径，依次替换这20个文件，得到20个果蝇物种pqs.bed文件
+a <- "/home/yuss/flyG4/data/Drosophila_genome/Dmel.fna"
+b <- "/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/009.1.Dmel.pqs.bed"
+#将基因组序列文件导入R成为变量genome
+genome <- readDNAStringSet(a)
+#使用pqsfinder在每个染色体上分别注释pqs，结果赋给chr_pqs。再从得到的结果中提取所需数据成为数据框chr?_df，包括：各个PQS的start，end，strand，score
+allpqs <- data.frame()
+for (i in c(1:length(genome@ranges@NAMES))) {
+  chri_pqs <- pqsfinder(genome[[i]],overlapping = FALSE,min_score = 50)
+  chri_df <- list(chri_pqs@ranges,chri_pqs@elementMetadata)%>%
+    data.frame()%>%
+    mutate(chr=paste("chr",strsplit(genome@ranges@NAMES[i]," ")[[1]][1],sep = ""))%>%
+    select(15,1,2,5,4)
+  allpqs <- rbind(allpqs,chri_df)
+}
+#产生id
+allpqs <- mutate(allpqs,PQSID=paste("id",n=c(1:nrow(allpqs)),sep="_"))%>%
+  select(1,2,3,6,4,5)
+#储存
+data.table::fwrite(allpqs,file =b,sep = '\t',row.names = F,quote = F,col.names = F)
+```
+
+#3.生成score>55的bed
+```{r}
+rm(list = ls());gc();rm(list = ls())
+library("data.table")
+Num = "009.1."
+setwd("/home/yuss/flyG4/result/20SpeciesDrosophilaPQS")
+files <- list.files("/home/yuss/flyG4/result/20SpeciesDrosophilaPQS",pattern = "\\.bed$")
+path <- '/home/yuss/flyG4/result/20SpeciesDrosophilaPQS'
+filepath <- sapply(files, function(x){
+  paste(path,x,sep = '/')
+})
+data <- list()
+for (i in 1:length(files)){
+  data[[i]] <- fread(filepath[[i]])
+}
+##分开的文件
+# for (i in 1:length(files)){
+#   var_name <- gsub('pqs.bed', '',files[i])
+#   var_name <- gsub('009.1.', '',var_name)
+#   assign(var_name, read.table(files[i], sep = '\t', header = F)) ##assign()函数将一个读取的数据框对象分配给先前定义的变量名 var_name
+# }
+
+# 创建一个新的存储路径
+output_path <- '/home/yuss/flyG4/result/20SpeciesDrosophilaPQS'
+dir.create(output_path, showWarnings = FALSE)
+
+# 循环筛选和保存
+for (i in seq_along(data)) {
+  # 筛选第五列大于55的数据
+  filtered_data <- data[[i]] %>% filter(V5 > 55)
+  
+  # 构造新的文件名
+  new_filename <- gsub('.bed', '.55bed',files[i])
+  new_filename <- paste0(output_path, '/', new_filename)
+  
+  # 保存筛选后的数据
+  write.table(filtered_data, file = new_filename, sep = '\t', col.names = FALSE, row.names = FALSE, quote = FALSE)
+}
+
+```
+
+#4.生成score>60的bed
+```{r}
+rm(list = ls());gc();rm(list = ls())
+Num = "009.1."
+setwd("/home/yuss/flyG4/result/20SpeciesDrosophilaPQS")
+files <- list.files("/home/yuss/flyG4/result/20SpeciesDrosophilaPQS",pattern = "\\.bed$")
+path <- '/home/yuss/flyG4/result/20SpeciesDrosophilaPQS'
+filepath <- sapply(files, function(x){
+  paste(path,x,sep = '/')
+})
+data <- list()
+for (i in 1:length(files)){
+  data[[i]] <- fread(filepath[[i]])
+}
+
+# 创建一个新的存储路径
+output_path <- '/home/yuss/flyG4/result/20SpeciesDrosophilaPQS'
+dir.create(output_path, showWarnings = FALSE)
+
+# 循环筛选和保存
+for (i in seq_along(data)) {
+  # 筛选第五列大于55的数据
+  filtered_data <- data[[i]] %>% filter(V5 > 60)
+  
+  # 构造新的文件名
+  new_filename <- gsub('.bed', '.60bed',files[i])
+  new_filename <- paste0(output_path, '/', new_filename)
+  
+  # 保存筛选后的数据
+  write.table(filtered_data, file = new_filename, sep = '\t', col.names = FALSE, row.names = FALSE, quote = FALSE)
+}
+
+```
+
+
+#第二步20种果蝇pqs预测的数量统计
+---
+title: "20种果蝇pqs预测的数量统计"
+author: "yuss"
+date: "钉钉2023-11-29"
+code path: /home/yuss/flyG4/script/009.2.20SpeciesDrosophilaPQS.Counts.R
+---
+#1.统计数量
+
+```{r, include=FALSE}
+setwd("/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/")
+getwd()
+# 获取所有50BED文件
+filename <- list.files(pattern = "\\.bed$")
+
+# 存储文件名称和相应的行数
+file_info <- data.frame('Filename' = character(length(filename)), 'Count' = numeric(length(filename)))
+
+# 遍历每个BED文件，获取文件名称和行数
+for (i in seq_along(filename)) {
+  # 提取文件名称
+  var_name <- gsub('.pqs.bed', '', filename[i])
+  var_name1 <- gsub('009.1.', '', var_name)
+  
+  # 读取文件行数
+  file_data <- read.table(filename[i], sep = '\t', header = FALSE)
+  line_count <- nrow(file_data)
+  
+  # 存储文件名称和行数
+  file_info[i, 'Filename'] <- var_name1
+  file_info[i, 'Count'] <- line_count
+}
+
+# 获取所有55BED文件
+filename <- list.files(pattern = "\\.55bed$")
+
+# 存储文件名称和相应的行数
+file55_info <- data.frame('Filename' = character(length(filename)), '55Count' = numeric(length(filename)))
+
+# 遍历每个BED文件，获取文件名称和行数
+for (i in seq_along(filename)) {
+  # 提取文件名称
+  var_name <- gsub('.pqs.55bed', '', filename[i])
+  var_name1 <- gsub('009.1.', '', var_name)
+  
+  # 读取文件行数
+  file_data <- read.table(filename[i], sep = '\t', header = FALSE)
+  line_count <- nrow(file_data)
+  
+  # 存储文件名称和行数
+  file55_info[i, 'Filename'] <- var_name1
+  file55_info[i, '55Count'] <- line_count
+}
+
+# 获取所有score为60的BED文件
+filename <- list.files(pattern = "\\.60bed$")
+
+# 存储文件名称和相应的行数
+file60_info <- data.frame('Filename' = character(length(filename)), '60Count' = numeric(length(filename)))
+
+# 遍历每个BED文件，获取文件名称和行数
+for (i in seq_along(filename)) {
+  # 提取文件名称
+  var_name <- gsub('.pqs.60bed', '', filename[i])
+  var_name1 <- gsub('009.1.', '', var_name)
+  
+  # 读取文件行数
+  file_data <- read.table(filename[i], sep = '\t', header = FALSE)
+  line_count <- nrow(file_data)
+  
+  # 存储文件名称和行数
+  file60_info[i, 'Filename'] <- var_name1
+  file60_info[i, '60Count'] <- line_count
+}
+file_info$score55 <- file55_info[match(file_info$Filename,file55_info$Filename),3]
+file_info$score60 <- file60_info[match(file_info$Filename,file60_info$Filename),3]
+colnames(file_info)[2] <- "score50"
+file_info_long <- pivot_longer(file_info, cols = starts_with("score"), names_to = "Threshold", values_to = "Value")
+file_info_long$type <- gsub("score","",file_info_long$Threshold)
+
+file_info_long$Value10000 <- file_info_long$Value/10000
+```
+
+#2.可视化
+```{r}
+library(ggplot2)
+# 绘制柱状图
+ggplot(file_info_long, aes(x = Filename, y = Value10000, fill = type)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  ylab(expression("Count (" * x10^4 * ")")) +
+  scale_fill_manual(values = c("#9DC9E1", "#3182BD", "#08519C"),name = "score") +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0, 13)) +
+  theme_bw() +
+  theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.text.x = element_text(angle = 45, hjust = 1, colour = "black", size = 14),
+      axis.text.y = element_text(size = 14, colour = "black"),
+      axis.title.y = element_text(size = 16, colour = "black"),
+      axis.title.x = element_blank(),
+      legend.direction = "horizontal", ##设置图例水平放置
+      legend.position = c(0.2,0.88),
+      legend.text = element_text(size = 13),  # 调整图例文字大小
+      legend.title = element_text(size = 13)  # 调整图例标题大小
+  )
+```
+
+```{r}
+ggsave(filename = paste0("/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/Picture/",Num,"20SpeciesDrosophilaPQSCounts.pdf"),
+       device = "pdf",width = 7.5,height = 3.8)
+```
+
+
+#第三步20种果蝇pqs在基因区和基因间区的数量统计
+---
+title: "20种果蝇pqs在基因区和基因间区的数量统计"
+author: "yuss"
+date: "钉钉2023-11-30"
+code path: /home/yuss/flyG4/script/009.3.20SpeciesDrosophilaPQS.GenicIntergenicCount.R
+---
+#1.统计基因间区和基因区pqs数量
+```{bash}
+##1.从注释文件中提取基因，生成genebed
+ls /home/yuss/flyG4/data/Drosophila_genome/gene_annotation/*.gff >/home/yuss/flyG4/data/Drosophila_genome/gene_annotation/gff.list
+vi generate_beds.sh
+#!/bin/bash
+
+# 设置输入和输出目录
+input_dir="/home/yuss/flyG4/data/Drosophila_genome/gene_annotation/"
+output_dir="/home/yuss/flyG4/data/Drosophila_genome/gene.bed/"
+
+# 读取gff文件列表
+gff_list="/home/yuss/flyG4/data/Drosophila_genome/gene_annotation/gff.list"
+
+# 循环处理每个gtf文件
+while IFS= read -r gff_file; do
+    # 提取文件名（不包括路径和扩展名）
+    base_name=$(basename "$gff_file" .gtf)
+    
+    # 生成bed文件的路径
+    output_bed="$output_dir/${base_name}.gene.bed"
+    
+    # 执行提取和转换操作
+    grep -w gene "$gff_file" | awk 'BEGIN{OFS="\t"} {print "chr"$1,$4,$5}' > "$output_bed"
+    
+    echo "Generated $output_bed"
+done < "$gff_list"
+bash generate_beds.sh
+
+##2.排序(因为提取的基因bed文件，基因和基因的位置信息是包含的，这样是错误的，所以用merge合并了)
+for i in /home/yuss/flyG4/data/Drosophila_genome/gene.bed/*.bed;do j=`basename $i`;sort -k1,1V -k2,2n -k3,3n $i | bedtools merge> /home/yuss/flyG4/result/20SpeciesDrosophilaPQS/genesortbed/${j%gff.gene.bed}gene.sort.bed;done
+
+##3.取交集，按照以下代码得到交集的数量，将值保存在一个记事本中，后期在R中读入
+(base) yuss@ubuntu:~/flyG4/result/20SpeciesDrosophilaPQS/genesortbed$ bedtools intersect -a "/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/009.1.Dyak.pqs.bed" -b Dyak.gene.sort.bed -wa | wc -l
+30303
+(base) yuss@ubuntu:~/flyG4/result/20SpeciesDrosophilaPQS/genesortbed$ bedtools intersect -a "/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/009.1.Dyak.pqs.bed" -b Dyak.gene.sort.bed -wa -v | wc -l
+24643
+```
+
+#2.可视化
+```{r}
+rm(list = ls());gc();rm(list = ls())
+Num = "009.3."
+Count <- read.table("/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/009.3.PQSCountGenicIntergenic.txt.txt",header = F,sep = " ")
+setwd("/home/yuss/flyG4/result/20SpeciesDrosophilaPQS")
+filename <- list.files(pattern = "\\.bed$")
+var_name <- gsub('.pqs.bed', '', filename)
+var_name1 <- gsub('009.1.', '', var_name)
+colnames(Count) <- Count[1,]
+Count <- Count[-1,]
+Count$species <- var_name1
+Count_long <- pivot_longer(Count, cols = c("Genic","Intergenic"), names_to = "type", values_to = "Value")
+Count_long$Value <- as.numeric(Count_long$Value)
+library(ggplot2)
+# 绘制柱状图
+ggplot(Count_long, aes(x = species, y = Value/10000, fill = type)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  ylab(expression("Count (" * x10^4 * ")")) +
+  scale_fill_manual(values = c("#7FC97F", "#BDACD3")) +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0, 10)) +
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, colour = "black", size = 14),
+    axis.text.y = element_text(size = 14, colour = "black"),
+    axis.title.y = element_text(size = 16, colour = "black"),
+    axis.title.x = element_blank(),
+    legend.direction = "horizontal", ##设置图例水平放置
+    legend.position = c(0.2,0.88),
+    legend.text = element_text(size = 13),  # 调整图例文字大小
+    legend.title = element_blank()  
+  )
+```
+```{r}
+ggsave(filename = paste0("/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/Picture/",Num,"20SpeciesDrosophilaPQS.GenicIntergenicCounts.pdf"),
+       device = "pdf",width = 7.5,height = 3.8)
+```
+
+
+#第四步20种果蝇pqs在基因区和基因间区的密度统计（数量除以区域的总长度）
+---
+title: "20种果蝇pqs在基因区和基因间区的密度统计"
+author: "yuss"
+date: "钉钉2023-11-30"
+code path: /home/yuss/flyG4/script/009.3.20SpeciesDrosophilaPQS.GenicIntergenicCount.R
+---
+#1.生成基因间区的bed文件(包括GC含量)
+```{bash}
+##1.染色体大小文件，并排序
+samtools faidx dmel-all-chromosome-r6.19.fasta ##构建索引
+cut -f1,2 "/home/yuss/flyG4/data/Drosophila_genome/Dyak.fna.fai" | sort -k1,1V -k2,2n > /home/yuss/flyG4/data/Drosophila_genome/chrsize/Dyak.chrom.sizes
+##2.生成染色体大小文件
+sed -i "s/chr//" /home/yuss/flyG4/result/20SpeciesDrosophilaPQS/genesortbed/*.bed ##删除chr
+bedtools complement -i "/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/genesortbed/Dyak.gene.sort.bed" -g "/home/yuss/flyG4/data/Drosophila_genome/Dyak.fna" > /home/yuss/flyG4/result/20SpeciesDrosophilaPQS/genesortbed/Dyak.intergenic.bed
+##3.批量生成染色体大小文件
+(base) yuss@ubuntu:~/flyG4/data/Drosophila_genome$ ls *.fai > /home/yuss/flyG4/data/Drosophila_genome/chrsize/fai.lst
+(base) yuss@ubuntu:~/flyG4/data/Drosophila_genome$ cd /home/yuss/flyG4/data/Drosophila_genome/chrsize/
+awk -F '.' '{print "cut -f1,2 /home/yuss/flyG4/data/Drosophila_genome/"$0" | sort -k1,1V -k2,2n > /home/yuss/flyG4/data/Drosophila_genome/chrsize/"$1".chrom.sizes"}' fai.lst > chrsize.sh
+bash chrsize.sh
+##4.生成基因间区的bed文件
+bedtools complement -i "/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/genesortbed/Dana.gene.sort.bed" -g /home/yuss/flyG4/data/Drosophila_genome/chrsize/Dana.chrom.sizes > /home/yuss/flyG4/result/20SpeciesDrosophilaPQS/genesortbed/Dana.intergenic.bed
+##5.批量生成基因间区的bed文件
+ls *.bed > genebed.lst
+awk -F '.' '{print "/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/genesortbed/"$0"\t/home/yuss/flyG4/data/Drosophila_genome/chrsize/"$1".chrom.sizes\t""/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/genesortbed/"$1".intergenic.bed"}' genebed.lst > 1.lst
+awk -F '\t' '{print "bedtools complement -i "$1" -g "$2" > "$3}' 1.lst > 1.sh
+bash 1.sh
+##6.批量生成基因区和基因间区的GC含量文件
+cp /home/yuss/flyG4/result/20SpeciesDrosophilaPQS/genesortbed/genebed.lst /home/yuss/flyG4/result/20SpeciesDrosophilaPQS/009.3.GCContent
+
+awk -F '.' '{print "bedtools nuc -fi /home/yuss/flyG4/data/Drosophila_genome/"$1".fna -bed /home/yuss/flyG4/result/20SpeciesDrosophilaPQS/genesortbed/"$1".gene.sort.bed > /home/yuss/flyG4/result/20SpeciesDrosophilaPQS/009.3.GCContent/"$1".genic.GC.txt"}' genebed.lst > genic.sh
+awk -F '.' '{print "bedtools nuc -fi /home/yuss/flyG4/data/Drosophila_genome/"$1".fna -bed /home/yuss/flyG4/result/20SpeciesDrosophilaPQS/genesortbed/"$1".intergenic.bed > /home/yuss/flyG4/result/20SpeciesDrosophilaPQS/009.3.GCContent/"$1".intergenic.GC.txt"}' genebed.lst > intergenic.sh
+bash genic.sh
+```
+
+#2.统计基因间区和基因区pqs密度
+```{r}
+library(data.table)
+setwd("/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/009.3.GCContent")
+path <- "/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/009.3.GCContent"
+files <- list.files(pattern = "\\.txt$")
+filespath <- lapply(files, function(x)paste(path,x,sep = '/'))
+data <- list()
+data <- lapply(filespath, function(x)fread(x))
+b <- gsub(".GC.txt"," ",files) ##gsub("目标字符", "替换字符", 对象)
+
+data2 <- list()
+for (i in 1:40) {
+  data2[[i]] <- data[[i]][,c(1:3,5,12)]
+  data2[[i]]$group <- b[i]
+  colnames(data2[[i]]) <- c("chr","start","end","gc","length","group")
+}
+
+head(data2[[1]]$gc)
+mean(data2[[1]]$gc)
+
+length_list <- list()
+for (i in 1:40) {
+  length_list[[i]] <- data.frame(group = b[i], length=sum(data2[[i]]$length))
+}
+df_length <- do.call(rbind,length_list)
+df_length$group <- gsub(" ","",df_length$group)
+
+colnames(Count)[1] <- "genic"
+colnames(Count)[2] <- "intergenic"
+Count_long <- pivot_longer(Count, cols = c("genic","intergenic"), names_to = "type", values_to = "Value")
+Count_long$Value <- as.numeric(Count_long$Value)
+
+Count_long$type1 <- paste(Count_long$species,Count_long$type,sep=".")
+Count_long$length <- df_length[match(Count_long$type1,df_length$group),2]
+Count_long$lennormal <- Count_long$Value/Count_long$length
+```
+
+#3.可视化
+```{r}
+ggplot(Count_long, aes(x = species, y = lennormal*1000, fill = type)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  # ylab(expression(atop("Number of normalized", paste("PQS ", "(", x10^-4, ")")))) +
+  ylab("Density (No./kb)") +
+  scale_fill_manual(values = c("#7FC97F", "#BDACD3"),
+                    breaks = c("genic","intergenic"),
+                    labels = c("Genic","Intergenic")) + ##修改图例名称（不是图例标题名称）
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0, 1)) +
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, colour = "black", size = 14),
+    axis.text.y = element_text(size = 14, colour = "black"),
+    axis.title.y = element_text(size = 16, colour = "black"),
+    axis.title.x = element_blank(),
+    legend.direction = "horizontal", ##设置图例水平放置
+    legend.position = c(0.2,0.88),
+    legend.text = element_text(size = 13),  # 调整图例文字大小
+    legend.title = element_blank(),
+    plot.margin = margin(t = 10,  # 顶部边缘距离
+                         r = 5,  # 右边边缘距离
+                         b = 5,  # 底部边缘距离
+                         l = 5)) # 左边边缘距离
+```
+```{r}
+ggsave(filename = paste0("/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/Picture/",Num,"20SpeciesDrosophilaPQS.GenicIntergenic.Density.pdf"),
+       device = "pdf",width = 7.5,height = 3.8)
+```
+
+
+#第五步20种果蝇在基因区和基因间区的GC含量统计
+---
+title: "20种果蝇在基因区和基因间区的GC含量统计"
+author: "yuss"
+date: "钉钉2023-11-30"
+code path: /home/yuss/flyG4/script/009.3.20SpeciesDrosophilaPQS.GenicIntergenicCount.R
+---
+#1.统计GC含量
+```{r}
+df_list <- list()
+for (i in 1:40) {
+  df_list[[i]] <- data.frame(group = b[i], gc = mean(data2[[i]]$gc))
+}
+df <- do.call(rbind, df_list)
+#as.character(head(df$group)) 这列有空格
+df$group <- gsub(" ","",df$group)
+df2 <- separate(df,group,into=c("species","type"),sep = "\\.")
+```
+#2.可视化
+```{r}
+ggplot(df2, aes(x = species, y = gc, fill = type)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  ylab(expression("GC Content")) +
+  scale_fill_manual(values = c("#7FC97F", "#BDACD3"),
+                    breaks = c("genic","intergenic"),
+                    labels = c("Genic","Intergenic")) + ##修改图例名称（不是图例标题名称）
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0, 0.7)) +
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, colour = "black", size = 14),
+    axis.text.y = element_text(size = 14, colour = "black"),
+    axis.title.y = element_text(size = 16, colour = "black"),
+    axis.title.x = element_blank(),
+    legend.direction = "horizontal", ##设置图例水平放置
+    legend.position = c(0.2,0.88),
+    legend.text = element_text(size = 13),  # 调整图例文字大小
+    legend.title = element_blank(),
+    plot.margin = margin(t = 10,  # 顶部边缘距离
+                         r = 5,  # 右边边缘距离
+                         b = 5,  # 底部边缘距离
+                         l = 5)) # 左边边缘距离
+```
+
+```{r}
+ggsave(filename = paste0("/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/Picture/",Num,"20SpeciesDrosophilaPQS.GenicIntergenic.GCContent.pdf"),
+       device = "pdf",width = 7.5,height = 3.8)
+```
+
+#第六步20种果蝇pqs在基因区和基因间区的标准化后的密度统计（数量除以区域的总长度（kb），再除以GC含量）
+---
+title: "20种果蝇pqs在基因区和基因间区的标准化后的密度统计"
+author: "yuss"
+date: "钉钉2023-11-30"
+code path: /home/yuss/flyG4/script/009.3.20SpeciesDrosophilaPQS.GenicIntergenicCount.R
+---
+
+```{r}
+Count_long$gc <- df[match(Count_long$type1,df$group),2]
+Count_long$normaldensity <- Count_long$lennormal/Count_long$gc
+ggplot(Count_long, aes(x = species, y = normaldensity*1000, fill = type)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  # ylab(expression(atop("Number of normalized", paste("PQS ", "(", x10^-4, ")")))) +
+  ylab("Normalized density (No./kb/GC%)") +
+  scale_fill_manual(values = c("#7FC97F", "#BDACD3"),
+                    breaks = c("genic","intergenic"),
+                    labels = c("Genic","Intergenic")) + ##修改图例名称（不是图例标题名称）
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0, 2)) +
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, colour = "black", size = 14),
+    axis.text.y = element_text(size = 14, colour = "black"),
+    axis.title.y = element_text(size = 16, colour = "black"),
+    axis.title.x = element_blank(),
+    legend.direction = "horizontal", ##设置图例水平放置
+    legend.position = c(0.2,0.88),
+    legend.text = element_text(size = 13),  # 调整图例文字大小
+    legend.title = element_blank(),
+    plot.margin = margin(t = 12,  # 顶部边缘距离
+                         r = 5,  # 右边边缘距离
+                         b = 5,  # 底部边缘距离
+                         l = 5)) # 左边边缘距离
+```
+
+```{r}
+ggsave(filename = paste0("/home/yuss/flyG4/result/20SpeciesDrosophilaPQS/Picture/",Num,"20SpeciesDrosophilaPQS.GenicIntergenic.NormalizedDensity.pdf"),
+       device = "pdf",width = 7.5,height = 3.8)
+```
+

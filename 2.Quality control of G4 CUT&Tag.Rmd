@@ -1,0 +1,262 @@
+Quality control of G4 CUT&Tag
+#G4 CUT&Tag数据的质控
+#第一步G4 CUT&Tag信号的斯皮尔曼相关性
+---
+title: "G4 CUT&Tag信号的斯皮尔曼相关性"
+author: "yuss"
+date: "钉钉2023-08-03"
+code path: 无，在linux完成
+
+
+```{bash}
+##使用虚拟环境安装deeptools
+(base) yuss@ubuntu:~$ conda create --name pytorch-deeptools
+(base) yuss@ubuntu:~$ conda activate pytorch-deeptools
+(pytorch-deeptools) yuss@ubuntu:~$ conda install -c bioconda deeptools
+##建索引
+samtools index KC-G4-rep1_R1.q20.marked_duplicates.bam
+samtools index KC-G4-rep2_R1.q20.marked_duplicates.bam
+samtools index S2-G4-rep1_R1.q20.marked_duplicates.bam
+##计算bam文件的coverage
+multiBamSummary bins --bamfiles KC-G4-rep1_R1.q20.marked_duplicates.bam KC-G4-rep2_R1.q20.marked_duplicates.bam -o 003.8.kc.results.npz
+multiBamSummary bins --bamfiles S2-G4-rep1_R1.q20.marked_duplicates.bam S2-G4-rep2_R1.q20.marked_duplicates.bam -o 003.8.s2.results.npz
+##可视化（散点图）
+plotCorrelation -in 003.8.kc.results.npz --corMethod spearman --skipZeros --plotTitle " " --whatToPlot scatterplot --colorMap RdYlBu --plotNumbers --log1p --zMin 0.5 --zMax 1 --labels KC167-rep1 KC167-rep2 -o 003.8.kc.scatterplot.SpearmanCorr.readCounts.pdf --outFileCorMatrix 003.8.kc.scatterplot.SpearmanCorr.readCounts.tab
+plotCorrelation -in 003.8.s2.results.npz --corMethod spearman --skipZeros --plotTitle " " --whatToPlot scatterplot --colorMap RdYlBu --plotNumbers --log1p --zMin 0.5 --zMax 1 --labels S2-rep1 S2-rep2 -o 003.8.s2.scatterplot.SpearmanCorr.readCounts.pdf --outFileCorMatrix 003.8.s2.scatterplot.SpearmanCorr.readCounts.tab
+####其中参数zMin 0.5 --zMax 1是设置大小，labels是设置坐标的名称
+##可视化（热图）
+plotCorrelation -in 003.8.kc.results.npz --corMethod spearman --skipZeros --plotTitle " " --whatToPlot heatmap --colorMap RdYlBu_r --zMin 0.5 --zMax 1 --labels KC167-rep1 KC167-rep2 -o 003.8.kc.heatmap.SpearmanCorr.readCounts.pdf --outFileCorMatrix 003.8.kc.heatmap.SpearmanCorr_readCounts.tab
+```
+
+Motif分析
+#第二步Motif分析
+---
+title: "Motif分析"
+author: "yuss"
+date: "钉钉2023-09-03"
+code path: /home/yuss/flyG4/script/005.1.motif.R
+
+#1.重设显著性阈值为1e-5
+peak calling：识别出在实验中与某一特定抗体或蛋白质结合的染色质区域，这些区域通常被称为"峰"（peaks）。
+在peak calling中，需要设置显著性阈值，以确定哪些区域被认为是峰。通常，较高的显著性阈值将导致更严格的峰识别，而较低的阈值将产生更多的峰，但可能包含更多的假阳性。
+```{bash}
+ls /home/ssyu/flyG4/data/CUTTaq.ylxiong/*.q20.marked_duplicates.bam > fly_marked_duplicates.bam.txt
+for i in `cat fly_marked_duplicates.bam.txt`;do j=`basename $i`;echo "macs2 callpeak -t $i -q 1e-5 -f BAMPE -g dm -n ${j%.q20.marked_duplicates.bam} --outdir /home/ssyu/flyG4/result/CUTTaq.ylxiong/peakscalling/ 2>/home/ssyu/flyG4/result/CUTTaq.ylxiong/peakscalling/${j%q20.marked_duplicates.bam}log" > ${j%q20.marked_duplicates.bam}pbs;done
+for i in `ls /home/ssyu/flyG4/result/CUTTaq.ylxiong/script/*.pbs`;do qsub -q batch -V -l nodes=2:ppn=10 $i;done
+```
+
+#2.合并每个样品的两个重复Summits BED文件，将峰顶位置向上下游延伸50 bp，并生成相应的DNA序列文件
+```{bash}
+cat KC-G4-rep1_R1_summits.bed KC-G4-rep2_R1_summits.bed > /home/ssyu/flyG4/result/CUTTaq.ylxiong/summits/KC.merge.summits.bed
+grep -w -E "2L|2R|3L|3R|4|X|Y" /home/ssyu/flyG4/result/CUTTaq.ylxiong/summits/KC.merge.summits.bed | sort -k1,1 -k2,2n | bedtools merge -i - > /home/ssyu/flyG4/result/CUTTaq.ylxiong/summits/KC.final.merge.summits.bed ##bedtools merge是确保在合并后的Summits文件中，相邻或重叠的峰值被合并成一个较大的峰值，以减少峰值的重复性，sort -k1,1 -k2,2n 的含义是按染色体名称（第一个字段）进行排序，如果染色体名称相同，则按峰值的起始位置（第二个字段）进行数值排序，以确保Summits BED文件按正确的顺序排列，适合后续的 bedtools merge 操作。
+slop -i KC.final.merge.summits.bed -g "/home/ssyu/flyG4/data/ref/dmel.chrom.sizes" -b 50 > ./KC.slopped.summits.bed
+bedtools getfasta -fi "/home/ssyu/flyG4/data/ref/dmel-all-chromosome-r6.19.fasta" -bed KC.slopped.summits.bed -fo KC.slopped.summits.fa
+
+cat S2-G4-rep1_R1_summits.bed S2-G4-rep2_R1_summits.bed > /home/ssyu/flyG4/result/CUTTaq.ylxiong/summits/S2.merge.summits.bed
+grep -w -E "2L|2R|3L|3R|4|X|Y" /home/ssyu/flyG4/result/CUTTaq.ylxiong/summits/S2.merge.summits.bed | sort -k1,1 -k2,2n | bedtools merge -i - > /home/ssyu/flyG4/result/CUTTaq.ylxiong/summits/S2.final.merge.summits.bed
+bedtools slop -i S2.final.merge.summits.bed -g "/home/ssyu/flyG4/data/ref/dmel.chrom.sizes" -b 50 > ./S2.slopped.summits.bed
+bedtools getfasta -fi "/home/ssyu/flyG4/data/ref/dmel-all-chromosome-r6.19.fasta" -bed S2.slopped.summits.bed -fo S2.slopped.summits.fa
+```
+#3.将fa文件上传meme分析，先设置将被挖掘出的结构域（motif）的种类数量为20，在完成分析后，再查看分析结果中结构域的显著性。再将20改成实际值做一遍
+
+#4.可视化
+```{r}
+####用seqLogo可视化motif####
+#PPM-PFM-PWM
+# BiocManager::install("seqLogo")
+library(seqLogo)
+#1.输入motif对应的PPM矩阵PPM（Position Probability Matrix），也称为位置概率矩阵
+data <- read.table("~/flyG4/1.txt.txt",header = F,sep = "\t",row.names = 1)
+#2.计算PFM
+##PPM矩阵就是将PFM矩阵中的频数转化成频率，除以每列的总和就可以了Position Frequency Matrix（PFM）。
+ppm <- sapply(1:ncol(data), function(t){data[[t]]/sum(data[[t]])})
+#3.位置权重矩阵position weight matrix（PWM）
+p <- makePWM(ppm)
+seqLogo(p)　　　　　　
+```
+
+```{r}
+####用ggseqlogo修改配色####
+#*KC motif---------------------------------------------------------------------
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "005.1."
+# BiocManager::install("ggseqlogo")
+library(ggseqlogo)
+# install.packages("ggplot2")
+library(ggplot2)
+library(magrittr)
+
+setwd("/home/yuss/flyG4/result/TopMotif/")
+filename <- list.files("/home/yuss/flyG4/result/TopMotif/",pattern = "^kc")
+a <- read.table("/home/yuss/flyG4/result/TopMotif/kc.FBgn0001325_3.txt",header = F,sep = "\t") %>% as.matrix()
+# 创建一个空列表来存储矩阵
+matrix_list <- list()
+for (i in 1:length(filename)){
+  var_name <- gsub('.txt', '',filename[i])
+  data_matrix <- as.matrix(read.table(filename[i], sep = '\t', header = F)) ##assign()函数将一个读取的数据框对象分配给先前定义的变量名 var_name
+  rownames(data_matrix) <- c("A", "C", "G", "T")
+  matrix_list[[var_name]] <- data_matrix
+  }
+ggseqlogo(matrix_list,method="bits",col_scheme="nucleotide",facet = "wrap",ncol = 4)
+
+# 翻转
+flip <- matrix_list[["kc.FBgn0003870_4"]]
+flip_matrix <- flip[nrow(flip):1,ncol(flip):1]
+rownames(flip_matrix) <- c("A", "C", "G", "T")
+matrix_list[["kc.FBgn0003870_4"]] <- flip_matrix
+
+flip <- matrix_list[["kc.FBgn0005630_14"]]
+flip_matrix <- flip[nrow(flip):1,ncol(flip):1]
+rownames(flip_matrix) <- c("A", "C", "G", "T")
+matrix_list[["kc.FBgn0005630_14"]] <- flip_matrix
+names(matrix_list) <- c("Motif 1","Motif 2","Motif 3","Motif 4","Motif 5","Motif 6","Motif 7","Mofit 8")
+ggseqlogo(matrix_list,method="bits",col_scheme="nucleotide",facet = "wrap",ncol = 4)
+ggsave(filename = paste0("/home/yuss/flyG4/result/TopMotif/Picture/",Num,"KCMotif.pdf"),
+       device = "pdf",width = 10,height = 3)
+```
+
+```{r}
+#*S2---------------------------------------------------------------------
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "005.1."
+
+library(ggseqlogo)
+library(ggplot2)
+library(magrittr)
+setwd("/home/yuss/flyG4/result/TopMotif/")
+filename <- list.files("/home/yuss/flyG4/result/TopMotif/",pattern = "^s2")
+
+# 创建一个空列表来存储矩阵
+matrix_list <- list()
+for (i in 1:length(filename)){
+  var_name <- gsub('.txt', '',filename[i])
+  data_matrix <- as.matrix(read.table(filename[i], sep = '\t', header = F)) ##assign()函数将一个读取的数据框对象分配给先前定义的变量名 var_name
+  rownames(data_matrix) <- c("A", "C", "G", "T")
+  matrix_list[[var_name]] <- data_matrix
+}
+ggseqlogo(matrix_list,method="bits",col_scheme="nucleotide",facet = "wrap",ncol = 4)
+##把含有C的motif的矩阵行和列进行翻转
+flip <- matrix_list[["s2.Ci_SANGER_5"]]
+flip_matrix <- flip[nrow(flip):1,ncol(flip):1]
+rownames(flip_matrix) <- c("A", "C", "G", "T")
+matrix_list[["s2.Ci_SANGER_5"]] <- flip_matrix
+
+flip <- matrix_list[["s2.OTF0267.1"]]
+flip_matrix <- flip[nrow(flip):1,ncol(flip):1]
+rownames(flip_matrix) <- c("A", "C", "G", "T")
+matrix_list[["s2.OTF0267.1"]] <- flip_matrix
+
+flip <- matrix_list[["s2.ttk-PA_SANGER_5"]]
+flip_matrix <- flip[nrow(flip):1,ncol(flip):1]
+rownames(flip_matrix) <- c("A", "C", "G", "T")
+matrix_list[["s2.ttk-PA_SANGER_5"]] <- flip_matrix
+names(matrix_list) <- c("Motif 1","Motif 2","Motif 3","Motif 4","Motif 5","Motif 6","Motif 7","Mofit 8")
+ggseqlogo(matrix_list,method="bits",col_scheme="nucleotide",facet = "wrap",ncol = 4)
+ggsave(filename = paste0("/home/yuss/flyG4/result/TopMotif/Picture/",Num,"S2Motif.pdf"),
+       device = "pdf",width = 10,height = 3)
+```
+
+#第三步Motif密度分析
+---
+title: "Motif分析"
+author: "yuss"
+date: "钉钉2023-09-09"
+code path: /home/yuss/flyG4/script/005.1.motif.R
+```{r}
+#*KC density---------------------------------------------------------------------
+# Database contains 37127 sequences, 3750405 residues
+# OTF0397.1	Q8MR37_DROME_B1H	AWGGGCGTGGC 9.6e-62 2095 motif occurences
+# OTF0352.1	Q7K9G4_DROME_B1H	BGYGGGGGGKS 9.6e-54 2629 motif occurences
+# FBgn0003870_4	ttk-PA_SANGER_5	CMACCCCTA 7.1e-35 530 motif occurences  (相反链)
+# FBgn0013469	klu_SANGER_10	TGYGKGGGTGK 5.4e-32 3280 motif occurences
+# FBgn0005630_15	lola-PL_SANGER_2.5	KGTGGGKCA 5.1e-19 1486 motif occurences
+# FBgn0001325_3	Kr_SANGER_5	RARGGGTW 1.1e-9 400 motif occurences
+# FBgn0005630_14	lola-PF_SANGER_5	MAACTCCAYY 6.1e-6 (相反链) 1445 motif occurences 
+# GGANGNGGAKGHGGA	MEME-3	GGANGNGGAKGHGGA 2.8e-4 8070 motif occurences
+
+kc.density <- data.frame(name=c("FBgn0001325_3","FBgn0003870_4","FBgn0005630_14","FBgn0005630_15",
+                                "FBgn0013469","GGANGNGGAKGHGGA","OTF0352.1","OTF0397.1"),
+                         type=c("Motif 1","Motif 2","Motif 3","Motif 4","Motif 5","Motif 6","Motif 7","Mofit 8"),
+                         occurences=c(400,530,1445,1486,3280,8070,2629,2095),
+                         residues=c(rep(3750405,8)))
+kc.density$density <- round(kc.density$occurences/kc.density$residues,5)
+kc.density$type <- factor(kc.density$type, levels = c("Motif 1","Motif 2","Motif 3","Motif 4","Motif 5","Motif 6","Motif 7","Mofit 8"))
+ggplot(data = kc.density,aes(x=type,y=density))+
+  geom_bar(stat="identity",width=0.7,position='dodge',color = "black", fill = "#fdb863")+
+  scale_y_continuous(expand = c(0,0)) +
+  ylab("Density (occurence/residue)") +
+  cowplot::theme_half_open() +
+  theme(axis.title.y = element_text(size = 16),
+        axis.title.x = element_blank(),
+        axis.text = element_text(size = 14),
+        legend.position = "none") +
+  coord_cartesian(ylim = c(0,0.003))
+ggsave(filename = paste0("/home/yuss/flyG4/result/TopMotif/Picture/",Num,"KCMotif.Density.pdf"),
+       device = "pdf",width = 6,height = 3.2)
+```
+
+```{r}
+S2.density <- data.frame(name=c("28-AGGATGTGGA","A4IJ80_DROME_B1H","Ci_SANGER_5","crol-F7-16_SOLEXA",
+                                "l(3)neo38_SOLEXA_2.5","OTF0267.1","OTF0470.1","ttk-PA_SANGER_5"),
+                         type=c("Motif 1","Motif 2","Motif 3","Motif 4","Motif 5","Motif 6","Motif 7","Motif 8"),
+                         occurences=c(2122,2029,1398,4669,5028,1196,1308,435),
+                         residues=c(rep(2996805,8)))
+S2.density$density <- round(S2.density$occurences/S2.density$residues,5)
+S2.density$type <- factor(S2.density$type, levels = c("Motif 1","Motif 2","Motif 3","Motif 4","Motif 5","Motif 6","Motif 7","Motif 8"))
+ggplot(data = S2.density,aes(x=type,y=density))+
+  geom_bar(stat="identity",width=0.7,position='dodge',color = "black", fill = "#fdb863")+
+  scale_y_continuous(expand = c(0,0)) +
+  scale_fill_manual(values = "yello") +
+  ylab("Density (occurence/residue)") +
+  cowplot::theme_half_open() +
+  theme(axis.title.y = element_text(size = 16),
+        axis.title.x = element_blank(),
+        axis.text = element_text(size = 14),
+        legend.position = "none") +
+  coord_cartesian(ylim = c(0,0.002))
+ggsave(filename = paste0("/home/yuss/flyG4/result/TopMotif/Picture/",Num,"S2Motif.Density.pdf"),
+       device = "pdf",width = 6,height = 3.2)
+
+```
+
+#第四步Fisher精确检验
+---
+title: "Fisher精确检验"
+author: "yuss"
+date: "钉钉2023-11-15"
+code path: /home/yuss/flyG4/script/003.5.fishertest.R
+```{r}
+rm(list = ls());gc();rm(list = ls())#清空
+Num="003.5."
+#fisher.test需要数据是整数
+##pqs 与 所有peak取交集
+data1 <- matrix(c(20979,12978,22938,30939), nrow = 2)
+colnames(data1) <- c("Peak regions","Other regions")
+rownames(data1) <- c("Observed_PQS","Expected_PQS")
+fisher.test(data1)
+#数据之前是个matrix，转换数据之前需要转成dataframe
+data1_df <- as.data.frame(data1)
+#宽数据转为长数据
+data1_long <- data1_df %>%
+  rownames_to_column(var = "type") %>%
+  gather(key = "peak", value = "value", -type)
+library(ggplot2)
+ggplot(data1_long,aes(x=type,y=value,fill=peak))+
+  geom_bar(stat="identity",position="fill",width = 0.6,color='black')+
+  theme_classic()+
+  xlab("")+
+  ylab("")+
+  labs(fill="")+
+  ggtitle("Fisher's Exact Test , p-value<2.2e-16")+
+  coord_flip()+
+  scale_x_discrete(labels = c("Observed_PQS" = "Observed\nPQS", "Expected_PQS" = "Expected\nPQS")) +  # 修改 x 坐标轴文本名称
+  scale_fill_manual(values = c("#05B9E2","#F27970"))+
+  theme(axis.text = element_text (size = 12,color = "black"),
+        plot.title = element_text(size = 14),  # 调整标题字体大小
+        legend.text = element_text(size = 12))  # 调整图例文本字体大小)
+
+#ggsave("/home/wangdy/BRE_celegans/plot/003_Genage_fisher_test.pdf",width = 4.5,height=3)
+ggsave(filename = paste0("/home/yuss/flyG4/result/data.reliability/Picture/",Num,"PeakFisherTest.pdf"),
+       device = "pdf",width = 5.5, height = 3)
+```
+

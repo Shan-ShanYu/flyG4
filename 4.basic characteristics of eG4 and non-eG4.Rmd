@@ -1,0 +1,699 @@
+#eG4与non-eG4的基本特征比较
+
+#第一步eG4和non-eG4的数量
+---
+title: "eG4和non-eG4的数量"
+author: "yuss"
+date: "钉钉2023-05-23"
+code path: /home/yuss/flyG4/script/001.2.PQS.intersect.R
+
+```{r}
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "001.2."
+#*每类G4的数量-----------------------------------------------------------
+merge.all <- fread("/home/yuss/flyG4/result/PQS/001.2.merge.all.bed") %>% as.data.frame()
+#计数
+num <- table(merge.all['type']) %>% as.data.frame() ##table()来计算mou一列中的出现次数
+num$type <- factor(num$type,levels =c("non_eG4","kc_specific","s2_specific","overlap","merge"))
+
+#non_eG4,kc_specific,s2_specific,overlap,merge的数量图
+library(ggplot2)
+library(ggsci)
+b = colorRampPalette(colors = c('#fddbc7', '#67001f'))(6)
+color <- c('#4d4d4d',b)
+ggplot(num, aes(x=type,y=Freq,fill=type)) + ##fill是图形的填充色
+  geom_bar(stat = 'identity',position = position_dodge(0.7),width = 0.7,color = 'white') + ##stat：设置统计方法,identity表示条形的高度是变量的值
+  coord_cartesian(ylim = c(0,30000)) + ##坐标轴范围
+  scale_y_continuous(expand = c(0,0)) +
+  scale_fill_manual(values = color) +
+  geom_text(aes(label=Freq,vjust = -0.5),color="black", size=4) + ##柱形图上加数值标签
+  cowplot::theme_half_open() + ##主题(左下边框，没有网格线)
+  ylab("Number of G4") + ##通过bquote函数给图标签添加上下标
+  theme(axis.title.y = element_text(size = 16), ##y坐标轴标题字体大小
+        axis.title.x = element_blank(), ##删除x坐标轴标题
+        axis.text = element_text(size=14), ##轴文本字体大小
+        legend.position = "none") 
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"G4Number.pdf"),
+       device = "pdf",width = 6.2, height = 4)    
+
+#*non_eG4和mergeG4的数量-------------------------------------------------
+num.noneG4.mergeG4 <- num[c(3,2),]
+ggplot(num.noneG4.mergeG4, aes(x=type,y=Freq,fill=type)) + ##fill是图形的填充色
+  geom_bar(stat = 'identity',position = position_dodge(0.7),width = 0.7,color = 'white') + ##stat：设置统计方法,identity表示条形的高度是变量的值
+  coord_cartesian(ylim = c(0,30000)) + ##坐标轴范围
+  scale_y_continuous(expand = c(0,0)) +
+  scale_fill_manual(values = c("#A1A9D0","#F0988C")) +
+  geom_text(aes(label=Freq,vjust = -0.5),color="black", size=4) + ##柱形图上加数值标签
+  cowplot::theme_half_open() + ##主题(左下边框，没有网格线)
+  ylab("Number of G4") + ##通过bquote函数给图标签添加上下标
+  theme(axis.title.y = element_text(size = 16), ##y坐标轴标题字体大小
+        axis.title.x = element_blank(), ##删除x坐标轴标题
+        axis.text = element_text(size=14), ##轴文本字体大小
+        legend.position = "none") +
+  coord_cartesian(ylim = c(0,30000)) +
+  scale_x_discrete(labels = c("non-eG4","eG4"))
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"non_eG4.eG4.Number.pdf"),
+       device = "pdf",width = 3.2, height = 3.5)  
+
+```
+
+#第二步eG4和non-eG4的长度
+---
+title: "eG4和non-eG4的长度"
+author: "yuss"
+date: "钉钉2023-05-24"
+code path: /home/yuss/flyG4/script/001.2.PQS.intersect.R
+```{r}
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "001.2."
+merge.all <- fread("/home/yuss/flyG4/result/PQS/001.2.merge.all.bed") %>% as.data.frame()
+merge.all$length <- merge.all$end-merge.all$start
+merge.all$type<-factor(merge.all$type,levels =c("non_eG4","kc_specific","s2_specific","overlap","merge"))
+#画图length
+my_comparisons = list(c("non_eG4","kc_specific"),c("kc_specific","s2_specific"),
+                      c("s2_specific","overlap"),c("overlap","merge"))
+b = colorRampPalette(colors = c('#fddbc7', '#67001f'))(6)
+color <- c('#4d4d4d',b)
+median.length <- aggregate(length ~  type, merge.all, median)
+library(ggpubr)
+#*每类G4的长度----------------------------------------------------------
+ggplot(data = merge.all,aes(x=type,y=length,fill=type)) +
+  geom_boxplot(notch = TRUE,outlier.colour = "white") +
+  stat_compare_means(comparisons = my_comparisons,label.y = c(rep(c(60,70),2)),
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size=4)+
+  scale_fill_manual(values = color) +
+  cowplot::theme_half_open()+
+  theme(axis.text = element_text(size = 14),
+        axis.title.y = element_text(size = 16),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab("Length (bp)") +
+  coord_cartesian(ylim = c(0,80)) +
+  geom_hline(yintercept = median.length[median.length$type == "non_eG4",2],linetype=2)
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"G4Length.pdf"),
+       device = "pdf",width = 6, height = 4)    
+
+#*non_eG4和mergeG4的长度------------------------------------------------
+merge.all.2 <- merge.all[merge.all$type=="non_eG4"|merge.all$type=="merge",] %>% as.data.frame()
+my_comparisons = list(c("non_eG4","merge"))
+ggplot(data = merge.all.2,aes(x=type,y=length,fill=type)) +
+  geom_boxplot(notch = TRUE,outlier.colour = "white") +
+  stat_compare_means(comparisons = my_comparisons,label.y = 55,
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size=4)+
+  scale_fill_manual(values = c("#A1A9D0","#F0988C")) +
+  cowplot::theme_half_open()+
+  theme(axis.text = element_text(size = 14),
+        axis.title.y = element_text(size = 16),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab("Length (bp)") +
+  coord_cartesian(ylim = c(0,60)) +
+  scale_x_discrete(labels = c("non_eG4", "eG4"))
+  #geom_hline(yintercept = median.length[median.length$type == "non_eG4",2],linetype=2)
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"non_eG4.eG4Length.pdf"),
+       device = "pdf",width = 3.5, height = 3.5) 
+
+```
+```{r}
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "001.5."
+#### Length distribution ####
+mergeG4 <- fread("/home/yuss/flyG4/result/PQS/5.type.bed/chr.bed/001.2.merge.chr.bed") %>% as.data.frame()
+mergeG4$length = mergeG4$V3-mergeG4$V2 + 1 ##在处理区间时，通常使用的是左闭右开的区间表示方式
+n = c(nrow(mergeG4),mean(mergeG4$length))
+mergeG4[mergeG4$length>50,"length"] = 50
+ggplot(mergeG4,aes(length)) +
+  geom_bar(aes(y = (..count..)/sum(..count..)*100),width = 0.75,fill="#F0988C") +
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(),panel.grid.minor = element_blank(),
+    axis.title.x = element_text(size = 12),axis.text.x = element_text(size = 10,color = "black"),
+    axis.title.y = element_text(size = 12),axis.text.y = element_text(size = 10,colour = "black")
+  ) +
+  scale_y_continuous(expand = c(0,0),limits = c(0,5.5)) +
+  xlab("G4 size (nt)") +
+  ylab("Density (%)") +
+  annotate(geom = "text", x=40, y=4.5,size=4,
+           label=paste0("Total eG4","\n",n[1],"\n","Mean size","\n",ceiling(n[2])," nts"))
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"LengthDistributionMergeG4.Dmel.pdf"),
+       device = "pdf",width = 3.2,height = 3.2)
+#* non_eG4---------------------------------------------------------------
+non_eG4 <- fread("/home/yuss/flyG4/result/PQS/5.type.bed/chr.bed/001.2.non_eG4.chr.bed") %>% as.data.frame()
+non_eG4$length = non_eG4$V3-non_eG4$V2 + 1 ##在处理区间时，通常使用的是左闭右开的区间表示方式
+n = c(nrow(non_eG4),mean(non_eG4$length))
+non_eG4[non_eG4$length>50,"length"] = 50
+ggplot(non_eG4,aes(length)) +
+  geom_bar(aes(y = (..count..)/sum(..count..)*100),width = 0.75,fill="#A1A9D0") +
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(),panel.grid.minor = element_blank(),
+    axis.title.x = element_text(size = 12),axis.text.x = element_text(size = 10,color = "black"),
+    axis.title.y = element_text(size = 12),axis.text.y = element_text(size = 10,colour = "black")
+  ) +
+  scale_y_continuous(expand = c(0,0),limits = c(0,5.5)) +
+  xlab("G4 size (nt)") +
+  ylab("Density (%)") +
+  annotate(geom = "text", x=40, y=4.5,size=4,
+           label=paste0("Total non_eG4","\n",n[1],"\n","Mean size","\n",ceiling(n[2])," nts"))
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"LengthDistributionnon_eG4.Dmel.pdf"),
+       device = "pdf",width = 3.2,height = 3.2)
+```
+
+#第三步eG4和non-eG4的GC含量
+---
+title: "eG4和non-eG4的GC含量"
+author: "yuss"
+date: "钉钉2023-5-25"
+code path: /home/yuss/flyG4/script/001.2.PQS.intersect.R
+```{bash}
+#计算每种G4的GC含量，输入的是G4的bed文件
+for i in /home/yuss/flyG4/result/5.type.bed/*.bed;do j=`basename $i`;
+bedtools nuc -fi /home/yuss/flyG4/data/ref/dmel-all-chromosome-r6.19.fasta -bed $i > /home/yuss/flyG4/result/${j%bed}GC.txt;done ##执行 bedtools nuc 命令，它计算了 .bed 文件中的核酸序列的碱基组成，并使用 -fi 选项指定参考基因组文件
+```
+
+```{r}
+Num = "001.2."
+path <- "/home/yuss/flyG4/result/PQS/GC-content"
+files <- dir(path)
+filespath <- lapply(files, function(x)paste(path,x,sep = '/'))
+data <- list()
+data <- lapply(filespath, function(x)fread(x))
+a <- gsub(".GC.txt"," ",files) ##gsub("目标字符", "替换字符", 对象)
+b <- gsub("001.2."," ",a)
+data2 <- list()
+for (i in 1:5) {
+  data2[[i]] <- data[[i]][,c(1:6,15)]
+  data2[[i]]$group <- b[i]
+}
+df <- do.call("rbind",data2)
+#as.character(head(df$group)) 这列有空格
+df$group <- gsub(" ","",df$group)
+df$group %<>% factor(.,levels = c("non_eG4","kc_specific","s2_specific","overlap","merge")) ##设置顺序
+colnames(df)[7] <- 'gc'
+#*每类G4------------------------------------------------------------
+medians <- aggregate(gc ~  group, df, median)
+my_comparisons = list(c("non_eG4","kc_specific"),c("kc_specific","s2_specific"),
+                      c("s2_specific","overlap"),c("overlap","merge"))
+b = colorRampPalette(colors = c('#fddbc7', '#67001f'))(6)
+color <- c('#4d4d4d',b)
+ggplot(data = df,aes(x = group,y = gc, color = group)) +
+  geom_boxplot(notch = TRUE,outlier.colour = "white",size = 0.8,fill = 'white') +
+  stat_compare_means(comparisons = my_comparisons,label.y = c(rep(c(1,1.1),3)),
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size = 4) +
+  scale_color_manual(values = color ) +
+  cowplot::theme_half_open() +
+  theme(axis.text = element_text(size=14),
+        axis.title.y = element_text(size = 16),
+        axis.title.x =element_blank(),legend.position="none")+
+  coord_cartesian(ylim = c(0.4,1.2)) +
+  ylab("GC content") +
+  geom_hline(yintercept = medians[medians$group =='non_eG4',2],linetype=2)
+
+#*non_eG4和mergeG4的GC含量----------------------------------------------
+gc.eG4.non_eG4 <- df[df$group=="non_eG4"|df$group=="merge"]
+gc.eG4.non_eG4$group <- factor(gc.eG4.non_eG4$group,c("non_eG4","merge"))
+my_comparisons = list(c("non_eG4","merge"))
+ggplot(data = gc.eG4.non_eG4,aes(x = group,y = gc, fill = group)) +
+  geom_boxplot(notch = TRUE,outlier.colour = "white") +
+  stat_compare_means(comparisons = my_comparisons,label.y = 0.95,
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size = 4) +
+  scale_fill_manual(values = c("#A1A9D0","#F0988C") ) +
+  cowplot::theme_half_open() +
+  theme(axis.text = element_text(size=14),
+        axis.title.y = element_text(size = 16),
+        axis.title.x =element_blank(),legend.position="none")+
+  coord_cartesian(ylim = c(0.4,1)) +
+  ylab("GC content") +
+  scale_x_discrete(labels = c("non-eG4","eG4"))
+  # geom_hline(yintercept = medians[medians$group =='non_eG4',2],linetype=2)
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"non_eG4.eG4GCcontent.pdf"),
+       device = "pdf",width = 3.2,height = 3.2)
+
+```
+
+#第四步eG4和non-eG4的保守性
+---
+title: "eG4和non-eG4的保守性"
+author: "yuss"
+date: "钉钉2023-5-26"
+code path: /home/yuss/flyG4/script/001.2.PQS.intersect.R
+```{bash}
+#计算保守性分数
+##1.下载ucsc官网bw文件
+wget -c https://hgdownload.soe.ucsc.edu/goldenPath/dm6/phastCons27way/dm6.27way.phastCons.bw ##-c断点续传命令
+wget -c https://hgdownload.soe.ucsc.edu/goldenPath/dm6/phyloP27way/dm6.phyloP27way.bw
+wget -c http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64/bigWigAverageOverBed ##小工具下载
+chmod 744 bigWigAverageOverBed ##更改文件属性
+./bigWigAverageOverBed ##检查工具是否可以运行
+mv bigWigAverageOverBed /home/yuss/software/
+##2.计算保守性
+awk -F "\t" '{print "chr"$1"\t"$2"\t"$3"\t"$4}' /home/yuss/flyG4/result/001.2.pqs_peak.bed | /home/yuss/software/bigWigAverageOverBed /home/yuss/flyG4/data/ucsc/dm6.phyloP27way.bw - /home/yuss/flyG4/result/001.2.pqs.peak.phyloP.bed ##正常情况下的管道输入，但由于不是-不是bigWigAverageOverBed的标准输入，会报错，把-改成stdin
+bigWigAverageOverBed通常用于计算 BigWig 文件中的信号值在 BED 区域内的平均值或其他统计信息。
+awk -F "\t" '{print "chr"$1"\t"$2"\t"$3"\t"$4}' /home/yuss/flyG4/result/001.2.pqs_peak.bed | /home/yuss/software/bigWigAverageOverBed /home/yuss/flyG4/data/ucsc/dm6.phyloP27way.bw stdin /home/yuss/flyG4/result/001.2.phyloP.bed
+awk -F "\t" '{print "chr"$1"\t"$2"\t"$3"\t"$4}' /home/yuss/flyG4/result/001.2.pqs_peak.bed | /home/yuss/software/bigWigAverageOverBed /home/yuss/flyG4/data/ucsc/dm6.27way.phastCons.bw stdin /home/yuss/flyG4/result/001.2.phastCons.bed
+##3.得到打分结果之后，将数据导入R中进行处理，其中phy和pha数据框需要的都是两列，一列是转录本ID，另一列是保守性打分。
+```
+
+```{r}
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "001.2."
+#*每类G4的保守性---------------------------------------------------------
+merge.all <- fread("/home/yuss/flyG4/result/PQS/001.2.merge.all.bed") %>% data.frame()
+phastCons <- fread("/home/yuss/flyG4/result/PQS/001.2.phastCons.bed") %>% data.frame()
+phyloP <- fread("/home/yuss/flyG4/result/PQS/001.2.phyloP.bed") %>% data.frame()  
+merge.all$pha <- phastCons[match(merge.all$id,phastCons$V1),6]
+merge.all$phy <- phyloP[match(merge.all$id,phyloP$V1),6]
+merge.all$type <- factor(merge.all$type,levels =c("non_eG4","kc_specific","s2_specific","overlap","merge"))
+my_comparisons = list(c("non_eG4","kc_specific"),c("kc_specific","s2_specific"),
+                      c("s2_specific","overlap"),c("overlap","merge"))
+b = colorRampPalette(colors = c('#fddbc7', '#67001f'))(6)
+color <- c('#4d4d4d',b)
+median.pha <- aggregate(pha ~  type, merge.all, median)
+library(ggpubr)
+ggplot(data = merge.all,aes(x=type,y=pha,fill=type)) +
+  geom_boxplot(notch = TRUE,outlier.colour = "white") +
+  stat_compare_means(comparisons = my_comparisons,label.y = c(rep(c(1,1.1),3)),
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size=4)+
+  scale_fill_manual(values = color) +
+  cowplot::theme_half_open()+
+  theme(axis.text = element_text(size = 14),
+        axis.title.y = element_text(size = 16),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab("PhastCons score") +
+  #coord_cartesian(ylim = c(0,80)) +
+  geom_hline(yintercept = median.pha[median.pha$type == "non_eG4",2],linetype=2)
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"G4PhastCons.pdf"),
+       device = "pdf",width = 6,height = 4)
+median.phy <- aggregate(phy ~  type, merge.all, median)
+ggplot(data = merge.all,aes(x=type,y=phy,fill=type)) +
+  geom_boxplot(notch = TRUE,outlier.colour = "white") +
+  stat_compare_means(comparisons = my_comparisons,label.y = c(rep(c(1.9,2.1),3)),
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size=4)+
+  scale_fill_manual(values = color) +
+  cowplot::theme_half_open()+
+  theme(axis.text = element_text(size = 14),
+        axis.title.y = element_text(size = 16),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab("PhyloP score") +
+  coord_cartesian(ylim = c(0,2.5)) +
+  geom_hline(yintercept = median.phy[median.phy$type == "non_eG4",2],linetype=2)
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"G4PhyloP.pdf"),
+       device = "pdf",width = 6, height = 4)  
+
+#*non_eG4和eG4----------------------------------------------------------
+non_eG4.eG4 <- merge.all[merge.all$type=="non_eG4"|merge.all$type=="merge",]
+my_comparisons = list(c("non_eG4","merge"))
+ggplot(data = non_eG4.eG4,aes(x=type,y=pha,fill=type)) +
+  geom_boxplot(notch = TRUE,outlier.colour = "white") +
+  stat_compare_means(comparisons = my_comparisons,label.y = 1,
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size=4)+
+  scale_fill_manual(values = c("#A1A9D0","#F0988C")) +
+  cowplot::theme_half_open()+
+  theme(axis.text = element_text(size = 14),
+        axis.title.y = element_text(size = 16),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab("PhastCons score") +
+  scale_x_discrete(labels = c("non-eG4", "eG4"))
+#geom_hline(yintercept = median.length[median.length$type == "non_eG4",2],linetype=2)
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"non_eG4.eG4PhastCons.pdf"),
+       device = "pdf",width = 3.5, height = 3.5) 
+
+ggplot(data = non_eG4.eG4,aes(x=type,y=phy,fill=type)) +
+  geom_boxplot(notch = TRUE,outlier.colour = "white") +
+  stat_compare_means(comparisons = my_comparisons,label.y = 1.6,
+                     aes(label = paste0("p = ", ..p.format..)),tip.length = 0,size=4)+
+  scale_fill_manual(values = c("#A1A9D0","#F0988C")) +
+  cowplot::theme_half_open()+
+  theme(axis.text = element_text(size = 14),
+        axis.title.y = element_text(size = 16),
+        axis.title.x = element_blank(),
+        legend.position = "none") +
+  ylab("PhyloP score") +
+  coord_cartesian(ylim = c(0,2.0)) +
+  scale_x_discrete(labels = c("non-eG4", "eG4"))
+#geom_hline(yintercept = median.length[median.length$type == "non_eG4",2],linetype=2)
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"non_eG4.eG4PhyloP.pdf"),
+       device = "pdf",width = 3.5, height = 3.5) 
+
+```
+#第五步eG4和non-eG4的基因组注释
+---
+title: "eG4和non-eG4的基因组注释"
+author: "yuss"
+date: "钉钉2023-10-19"
+code path: /home/yuss/flyG4/script/001.5.PatternDmel.AnnotateMergeG4.R
+```{r}
+rm(list = ls());gc();rm(list = ls())#清空
+setwd("/home/yuss/flyG4/script")
+Num = "001.5."
+#### genome annotation (mergeG4和non_eG4)####
+#*eG4基因组注释----------------------------------------------------------
+##创建转录组数据库（TxDb)
+##直接使用TxDb包中提供的函数来构建TxDb
+library(TxDb.Dmelanogaster.UCSC.dm6.ensGene)
+Dmel.txdb <- TxDb.Dmelanogaster.UCSC.dm6.ensGene
+##也可以用makeTxDbFromGFF()函数从GFF文件中创建TxDb   Dmel.txdb <-makeTxDbFromGFF("/home/qians/Quadruplex/Input/Ref/Fly/dmel-all-r6.19.gff",format = "gff3")
+library(ChIPseeker)
+merge.anno <- annotatePeak("/home/yuss/flyG4/result/PQS/5.type.bed/chr.bed/001.2.merge.chr.bed",
+                           tssRegion = c(-2000,2000),TxDb = Dmel.txdb)
+merge.anno
+## 可视化
+plotAnnoBar(merge.anno)
+plotAnnoPie(merge.anno)
+vennpie(merge.anno)
+
+df = merge.anno@annoStat
+class(df$Feature) ##factor
+df$Feature %<>% as.character()
+df[nrow(df)+1,] = c("Exon",df[df$Feature=="1st Exon",2]+df[df$Feature=="Other Exon",2])
+df[nrow(df)+1,] = c("Intron", as.numeric(df[df$Feature=="1st Intron",2])+as.numeric(df[df$Feature=="Other Intron",2]))
+df[nrow(df)+1,] = c("Promoter",as.numeric(df[df$Feature=="Promoter (<=1kb)",2])+as.numeric(df[df$Feature=="Promoter (1-2kb)",2]))
+df %<>% dplyr::filter(Feature %in% c("Promoter","5' UTR","3' UTR","Exon","Intron","Distal Intergenic","Downstream (<=300)"))
+df$Frequency %<>% as.numeric()
+df
+df %<>% arrange(-Frequency)
+## df 中的 Feature 列中的特定字符串 "Downstream (<=300)" 替换为 "Downstream"，并将修改后的结果存回 df$Feature 列,fixed = TRUE 参数表示使用字符串匹配而不是正则表达式匹配,接着把这列设置为因子，rev(.) 表示将列的因子水平逆序排列。
+df$Feature %<>% gsub("Downstream (<=300)","Downstream",.,fixed = TRUE) %>% factor(.,levels = rev(.))
+ggplot(df,aes(Feature,Frequency))+
+  geom_bar(stat = "identity",width = 0.75,fill="#F0988C") +
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(size = 14),axis.text.x = element_text(size = 12,colour = "black"),
+    axis.title.y = element_text(size = 14),axis.text.y = element_text(size = 12,colour = "black"),
+    plot.margin = margin(t = 10,  # 顶部边缘距离
+                         r = 10,  # 右边边缘距离
+                         b = 10,  # 底部边缘距离
+                         l = 10)) +
+  scale_y_continuous(expand = c(0,0),limits = c(0,50),position = "right") + ##y轴坐标轴在右边
+  ylab("Frequancy (%)") +
+  xlab("") +
+  annotate(x=7.6, xend = 7.6, y=0, yend = 50, colour="black", lwd=0.75,geom="segment") +
+  coord_flip()
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"LocationMergeG4.Dmel.pdf"),
+        device = "pdf",width = 3,height = 5)
+
+#* non_eG4基因组注释-----------------------------------------------------
+non_eG4.anno <- annotatePeak("/home/yuss/flyG4/result/PQS/5.type.bed/chr.bed/001.2.non_eG4.chr.bed",
+                           tssRegion = c(-2000,2000),TxDb = Dmel.txdb)
+non_eG4.anno
+##可视化
+plotAnnoBar(non_eG4.anno)
+plotAnnoPie(non_eG4.anno)
+vennpie(non_eG4.anno)
+
+df = non_eG4.anno@annoStat
+class(df$Feature) ##factor
+df$Feature %<>% as.character()
+df[nrow(df)+1,] = c("Exon",df[df$Feature=="1st Exon",2]+df[df$Feature=="Other Exon",2])
+df[nrow(df)+1,] = c("Intron", as.numeric(df[df$Feature=="1st Intron",2])+as.numeric(df[df$Feature=="Other Intron",2]))
+df[nrow(df)+1,] = c("Promoter",as.numeric(df[df$Feature=="Promoter (<=1kb)",2])+as.numeric(df[df$Feature=="Promoter (1-2kb)",2]))
+df %<>% dplyr::filter(Feature %in% c("Promoter","5' UTR","3' UTR","Exon","Intron","Distal Intergenic","Downstream (<=300)"))
+df$Frequency %<>% as.numeric()
+df
+## df 中的 Feature 列中的特定字符串 "Downstream (<=300)" 替换为 "Downstream"，并将修改后的结果存回 df$Feature 列,fixed = TRUE 参数表示使用字符串匹配而不是正则表达式匹配,接着把这列设置为因子，rev(.) 表示将列的因子水平逆序排列。
+df$Feature %<>% gsub("Downstream (<=300)","Downstream",.,fixed = TRUE) 
+df$Feature <- factor(df$Feature,levels = c("Downstream","5' UTR","3' UTR","Exon","Distal Intergenic","Intron","Promoter"))
+#df %<>% arrange(-Frequency)
+
+ggplot(df,aes(Feature,Frequency))+
+  geom_bar(stat = "identity",width = 0.75,fill="#A1A9D0") +
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(size = 14),axis.text.x = element_text(size = 12,colour = "black"),
+    axis.title.y = element_text(size = 14),axis.text.y = element_text(size = 12,colour = "black"),
+    plot.margin = margin(t = 10,  # 顶部边缘距离
+                         r = 10,  # 右边边缘距离
+                         b = 10,  # 底部边缘距离
+                         l = 10)) +
+  scale_y_continuous(expand = c(0,0),limits = c(0,50),position = "right") + ##y轴坐标轴在右边
+  ylab("Frequancy (%)") +
+  xlab("") +
+  annotate(x=7.6, xend = 7.6, y=0, yend = 50, colour="black", lwd=0.75,geom="segment") +
+  coord_flip()
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"Locationnon_eG4.G4.Dmel.pdf"),
+       device = "pdf",width = 3,height = 5)
+```
+
+#第六步两种细胞系的eG4分开来看eG4的基因组注释
+---
+title: "两种细胞系的eG4分开来看eG4的基因组注释"
+author: "yuss"
+code path: /home/yuss/flyG4/script/001.4.G4CUT&Taq.intersect.G4seq.R
+```{r}
+##kc
+VennDiag <- euler(c("G4-CUTTag" = 43192-13981,"PQS" = 43917-13981,
+                    "G4-CUTTag&PQS" = 13981))
+p <- plot(VennDiag, counts = TRUE, font=3, cex=1, alpha=1,quantities = TRUE,lwd =3.5,
+     labels=c("Kc G4-CUT&Tag","PQS"),
+          label.col = "white",fill="white",
+          col = c('#D76364','#5B4E4A'))
+p
+ggsave(p,filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"KcIntersectPeak.IntersectPQS.pdf"),
+       device = "pdf",width = 3.8,height = 3.8)
+##s2
+VennDiag <- euler(c("G4-CUTTag" = 38659-12004,"PQS" = 43917-12004,
+                    "G4-CUTTag&PQS" = 12004))
+p <- plot(VennDiag, counts = FALSE, font=3, cex=1, alpha=1,quantities = TRUE,lwd =3.5,
+     labels=c("S2 G4-CUT&Tag","PQS"),
+     label.col = "white",fill="white",
+     col = c('#5F97D3','#5B4E4A'))
+p
+ggsave(p, filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"S2IntersectPeak.IntersectPQS.pdf"),
+       device = "pdf",width = 3.8,height = 3.8)
+```
+
+/home/yuss/flyG4/script/001.3.PQS.genomic_annotation.R
+```{r}
+rm(list = ls());gc();rm(list = ls())
+Num = "001.3."
+##awk '{print "chr"$0}' "/home/yuss/flyG4/result/PQS/5.type.bed/001.2.s2_all.bed" > /home/yuss/flyG4/result/PQS/5.type.bed/001.2.s2_all.chr.bed
+#### genome annotation (s2 all eG4和kc all eG4)####
+#*s2 all eG4基因组注释----------------------------------------------------
+##创建转录组数据库（TxDb)
+##直接使用TxDb包中提供的函数来构建TxDb
+library(magrittr)
+#install.packages("gghalves")
+library(gghalves)
+library(TxDb.Dmelanogaster.UCSC.dm6.ensGene)
+Dmel.txdb <- TxDb.Dmelanogaster.UCSC.dm6.ensGene
+##也可以用makeTxDbFromGFF()函数从GFF文件中创建TxDb   Dmel.txdb <-makeTxDbFromGFF("/home/qians/Quadruplex/Input/Ref/Fly/dmel-all-r6.19.gff",format = "gff3")
+library(ChIPseeker)
+s2all.anno <- annotatePeak("/home/yuss/flyG4/result/PQS/5.type.bed/001.2.s2_all.chr.bed",
+                           tssRegion = c(-2000,2000),TxDb = Dmel.txdb)
+s2all.anno
+## 可视化
+plotAnnoBar(s2all.anno)
+plotAnnoPie(s2all.anno)
+vennpie(s2all.anno)
+
+df = s2all.anno@annoStat
+class(df$Feature) ##factor
+df$Feature %<>% as.character()
+df[nrow(df)+1,] = c("Exon",df[df$Feature=="1st Exon",2]+df[df$Feature=="Other Exon",2])
+df[nrow(df)+1,] = c("Intron", as.numeric(df[df$Feature=="1st Intron",2])+as.numeric(df[df$Feature=="Other Intron",2]))
+df[nrow(df)+1,] = c("Promoter",as.numeric(df[df$Feature=="Promoter (<=1kb)",2])+as.numeric(df[df$Feature=="Promoter (1-2kb)",2]))
+df %<>% dplyr::filter(Feature %in% c("Promoter","5' UTR","3' UTR","Exon","Intron","Distal Intergenic","Downstream (<=300)"))
+df$Frequency %<>% as.numeric()
+df
+df %<>% arrange(-Frequency)
+## df 中的 Feature 列中的特定字符串 "Downstream (<=300)" 替换为 "Downstream"，并将修改后的结果存回 df$Feature 列,fixed = TRUE 参数表示使用字符串匹配而不是正则表达式匹配,接着把这列设置为因子，rev(.) 表示将列的因子水平逆序排列。
+df$Feature %<>% gsub("Downstream (<=300)","Downstream",.,fixed = TRUE) %>% factor(.,levels = rev(.))
+ggplot(df,aes(Feature,Frequency))+
+  geom_bar(stat = "identity",width = 0.75,fill="#F0988C") +
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(size = 14),axis.text.x = element_text(size = 12,colour = "black"),
+    axis.title.y = element_text(size = 14),axis.text.y = element_text(size = 12,colour = "black"),
+    plot.margin = margin(t = 10,  # 顶部边缘距离
+                         r = 10,  # 右边边缘距离
+                         b = 10,  # 底部边缘距离
+                         l = 10)) +
+  scale_y_continuous(expand = c(0,0),limits = c(0,50),position = "right") + ##y轴坐标轴在右边
+  ylab("Frequancy (%)") +
+  xlab("") +
+  annotate(x=7.6, xend = 7.6, y=0, yend = 50, colour="black", lwd=0.75,geom="segment") +
+  coord_flip()
+
+df$lab <- paste0(round(df$Frequency,2),"%")
+
+library(ggplot2)
+library(ggforce)
+ggplot()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.ticks = element_blank(), 
+        axis.text.y = element_blank(),
+        axis.text.x = element_blank(),
+        legend.title=element_blank(), 
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        legend.direction = "horizontal",
+        legend.position = c(0.5, 0)
+  )+ #去除没用的ggplot背景
+  guides(fill = guide_legend(reverse = TRUE))+ #使用guides语法反转图例的项目顺序
+  xlab("")+ylab('')+#坐标轴
+  scale_fill_manual(values = c('#E5D2DD', '#53A85F', '#F1BB72', '#F3B1A0', 
+                               '#D6E7A3', '#57C3F3','#476D87'))+ #添加颜色
+  geom_arc_bar(data=df,
+               stat = "pie",
+               aes(x0=0,y0=0,r0=1,r=2,
+                   amount=Frequency,fill=Feature),
+                   color = "transparent"
+  )+#饼图（r0=0）
+  annotate("text",x=1.95,y=1.0,label="38.09%",angle=-62)+
+  annotate("text",x=0,y=-2.2,label="28.82%",angle=0)+
+  annotate("text",x=-2.2,y=0.3,label="21.51%",angle=80)+
+  annotate("text",x=-0.9,y=2,label="9.31%",angle=20)+
+  annotate("text",x=-0.1,y=2.18,label="1.78%",angle=5)
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"LocationS2allG4.Dmel.pdf"),
+       device = "pdf",width = 9,height = 9.2)
+
+#*kc all eG4基因组注释---------------------------------------------------
+kcall.anno <- annotatePeak("/home/yuss/flyG4/result/PQS/5.type.bed/001.2.kc_all.chr.bed",
+                           tssRegion = c(-2000,2000),TxDb = Dmel.txdb)
+kcall.anno
+## 可视化
+plotAnnoBar(kcall.anno)
+plotAnnoPie(kcall.anno)
+vennpie(kcall.anno)
+
+df = kcall.anno@annoStat
+class(df$Feature) ##factor
+df$Feature %<>% as.character()
+df[nrow(df)+1,] = c("Exon",df[df$Feature=="1st Exon",2]+df[df$Feature=="Other Exon",2])
+df[nrow(df)+1,] = c("Intron", as.numeric(df[df$Feature=="1st Intron",2])+as.numeric(df[df$Feature=="Other Intron",2]))
+df[nrow(df)+1,] = c("Promoter",as.numeric(df[df$Feature=="Promoter (<=1kb)",2])+as.numeric(df[df$Feature=="Promoter (1-2kb)",2]))
+df %<>% dplyr::filter(Feature %in% c("Promoter","5' UTR","3' UTR","Exon","Intron","Distal Intergenic","Downstream (<=300)"))
+df$Frequency %<>% as.numeric()
+df
+df %<>% arrange(-Frequency)
+## df 中的 Feature 列中的特定字符串 "Downstream (<=300)" 替换为 "Downstream"，并将修改后的结果存回 df$Feature 列,fixed = TRUE 参数表示使用字符串匹配而不是正则表达式匹配,接着把这列设置为因子，rev(.) 表示将列的因子水平逆序排列。
+df$Feature %<>% gsub("Downstream (<=300)","Downstream",.,fixed = TRUE) %>% factor(.,levels = rev(.))
+df$lab <- paste0(round(df$Frequency,2),"%")
+ggplot()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.ticks = element_blank(), 
+        axis.text.y = element_blank(),
+        axis.text.x = element_blank(),
+        legend.title=element_blank(), 
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        legend.direction = "horizontal",
+        legend.position = c(0.5, 0)
+        )+ #去除没用的ggplot背景
+  guides(fill = guide_legend(reverse = TRUE))+ #使用guides语法反转图例的项目顺序
+  xlab("")+ylab('')+#坐标轴
+  scale_fill_manual(values = c('#E5D2DD', '#53A85F', '#F1BB72', '#F3B1A0', 
+                               '#D6E7A3', '#57C3F3','#476D87'))+ #添加颜色
+  geom_arc_bar(data=df,
+               stat = "pie",
+               aes(x0=0,y0=0,r0=1,r=2,
+                   amount=Frequency,fill=Feature),
+               color = "transparent"
+  )+#饼图（r0=0）
+  annotate("text",x=1.95,y=1.0,label="36.06%",angle=-62)+
+  annotate("text",x=0,y=-2.2,label="30.18%",angle=0)+
+  annotate("text",x=-2.2,y=0.3,label="22.69%",angle=80)+
+  annotate("text",x=-0.9,y=2,label="8.76%",angle=20)+
+  annotate("text",x=-0.1,y=2.18,label="1.75%",angle=5)
+ggsave(filename = paste0("/home/yuss/flyG4/result/PQS/Picture/",Num,"LocationKcallG4.Dmel.pdf"),
+device = "pdf",width = 9,height = 9.2)
+```
+
+#第七步两种细胞系的G4 CUT&Tag peak和ATAC-seq peak在含有eG4的基因的启动子中的富集情况
+---
+title: "两种细胞系的G4 CUT&Tag peak和ATAC-seq peak在含有eG4的基因的启动子中的富集情况"
+author: "yuss"
+date: "钉钉2023-11-20"
+```{bash}
+1.准备promoter区s2 all eG4的文件和promoter区s2 peak文件
+(base) yuss@ubuntu:~/flyG4/result/PQS$ sed '1d' /home/yuss/flyG4/data/ref/promoter.bed | bedtools intersect -a - -b /home/yuss/flyG4/data/ref/s2_all.bed > /home/yuss/flyG4/data/ref/promoter.s2_all.bed
+scp /home/yuss/flyG4/data/ref/promoter.s2_all.bed ssyu@211.69.141.147:/home/ssyu/flyG4/result/S2.Histone.modifications/call_peak/
+
+/home/ylxiong/miniconda3/bin/computeMatrix reference-point -p 28 --referencePoint TSS -b 1000 -a 1000 -R /home/ssyu/flyG4/result/S2.Histone.modifications/call_peak/promoter.s2_all.bed -S S2.intersect.peaks.bw ATAC-seq.merge_peaks.bw Pol-II.merge_peaks.bw H3K27ac.merge_peaks.bw H3K4me1.merge_peaks.bw H3K4me3.merge_peaks.bw H4K16ac.merge_peaks.bw --skipZeros -out /home/ssyu/flyG4/result/S2.Histone.modifications/call_peak/bw/promoter.s2_all.TSS1000.gz --outFileSortedRegions /home/ssyu/flyG4/result/S2.Histone.modifications/call_peak/bw/promoter.s2_all.TSS1000.bed
+/home/ylxiong/miniconda3/bin/plotHeatmap -m promoter.s2_all.TSS1000.gz -out promoter.s2_all.TSS1000.pdf --heatmapHeight 15 --regionsLabel Promter_S2_eG4s
+
+sed '1d' /home/yuss/flyG4/data/ref/promoter.bed | bedtools intersect -a - -b /home/yuss/flyG4/data/ref/kc_all.bed > /home/yuss/flyG4/data/ref/promoter.kc_all.bed
+scp /home/yuss/flyG4/data/ref/promoter.kc_all.bed ssyu@211.69.141.147:/home/ssyu/flyG4/result/Kc.Histone.modifications/call_peak/
+/home/ylxiong/miniconda3/bin/computeMatrix reference-point -p 28 --referencePoint TSS -b 1000 -a 1000 -R /home/ssyu/flyG4/result/Kc.Histone.modifications/call_peak/promoter.kc_all.bed -S KC.intersect.peaks.bw ATAC-seq.merge_peaks.bw mock_pol2_s5.bw mock_h3k27ac.bw mock_h3k4me1.bw mock_h3k4me3.bw mock_h4k16ac.bw --skipZeros -out /home/ssyu/flyG4/result/Kc.Histone.modifications/call_peak/bw/promoter.kc_all.TSS1000.gz --outFileSortedRegions /home/ssyu/flyG4/result/Kc.Histone.modifications/call_peak/bw/promoter.kc_all.TSS1000.bed
+/home/ylxiong/miniconda3/bin/plotHeatmap -m promoter.kc_all.TSS1000.gz -out promoter.kc_all.TSS1000.pdf --heatmapHeight 15 --regionsLabel Promter_Kc_eG4s
+```
+
+#第八步两种细胞系的G4 CUT&Tag 信号与相关组蛋白修饰的关联性
+---
+title: "两种细胞系的G4 CUT&Tag 信号与相关组蛋白修饰的关联性"
+author: "yuss"
+date: "钉钉2023-11-21"
+/home/yuss/flyG4/script/008.1.HistoneSpearmanCorr.R
+```{bash}
+echo "~/miniconda3/envs/Trimgalore/bin/multiBamSummary bins --bamfiles /home/ssyu/flyG4/result/S2.Histone.modifications/picard_merge/S2-G4.merge.bam /home/ssyu/flyG4/result/S2.Histone.modifications/picard_merge/ATAC-seq.merge.bam /home/ssyu/flyG4/result/S2.Histone.modifications/picard_merge/Pol-II.merge.bam /home/ssyu/flyG4/result/S2.Histone.modifications/picard_merge/H3K27ac.merge.bam /home/ssyu/flyG4/result/S2.Histone.modifications/picard_merge/H3K4me1.merge.bam /home/ssyu/flyG4/result/S2.Histone.modifications/picard_merge/H3K4me3.merge.bam /home/ssyu/flyG4/result/S2.Histone.modifications/picard_merge/H4k16ac.merge.bam -o /home/ssyu/flyG4/result/S2.Histone.modifications/multiBamSummary/s2.bamcoverage.npz" > s2.bamcoverage.pbs
+
+/home/ylxiong/miniconda3/bin/plotCorrelation -in s2.bamcoverage.npz --corMethod spearman --skipZeros --plotTitle " " --whatToPlot scatterplot --colorMap RdYlBu --plotNumbers --log1p --zMin 0.5 --zMax 1 --labels S2-G4-CUTTag ATAC-seq POLR2A H3K27ac H3K4me1 H3K4me3 H4k16ac -o s2.scatterplot.SpearmanCorr.readCounts.pdf --outFileCorMatrix s2.scatterplot.SpearmanCorr.readCounts.tab
+
+```
+
+```{r}
+rm(list = ls());gc();rm(list = ls())
+Num = "008.1."
+##install.packages("ggcorrplot")
+library(ggcorrplot)
+library(corrplot)
+s2.SpearmanCorr <- fread('/home/yuss/flyG4/result/Histone.modifications/s2.scatterplot.SpearmanCorr.readCounts.tab') %>% data.frame()
+row.names(s2.SpearmanCorr) <- c("S2-G4-CUTTag","ATAC-seq","POLR2A", "H3K27ac","H3K4me1","H3K4me3","H4k16ac")
+s2.SpearmanCorr <- s2.SpearmanCorr[,-1]
+colnames(s2.SpearmanCorr) <- c("S2-G4-CUTTag","ATAC-seq","POLR2A", "H3K27ac","H3K4me1","H3K4me3","H4k16ac")
+s2.SpearmanCorr <- as.data.frame(sapply(s2.SpearmanCorr, as.numeric))
+row.names(s2.SpearmanCorr) <- c("S2-G4-CUTTag","ATAC-seq","POLR2A", "H3K27ac","H3K4me1","H3K4me3","H4k16ac")
+ggcorrplot(s2.SpearmanCorr, method = "circle", type = "upper", ggtheme = ggplot2::theme_classic(), title = "", 
+           show.legend = TRUE, legend.title = "Corr", show.diag = T, 
+           colors = c("blue", "white", "red"), outline.color = "grey", 
+           # hc.order = T, hc.method = "complete",
+           lab = FALSE, lab_col = "black", 
+           lab_size = 4, p.mat = NULL, sig.level = 0.05, insig = c("pch", "blank"), pch = 4, pch.col = "black", pch.cex = 5, tl.cex = 12, 
+           tl.col = "black", tl.srt = 45, digits = 2)
+
+##另外一种画法
+s2.SpearmanCorr <- fread('/home/yuss/flyG4/result/Histone.modifications/s2.scatterplot.SpearmanCorr.readCounts.tab')
+row.names(s2.SpearmanCorr) <- c("S2-G4-CUTTag","ATAC-seq","POLR2A", "H3K27ac","H3K4me1","H3K4me3","H4k16ac")
+s2.SpearmanCorr <- s2.SpearmanCorr[,-1]
+colnames(s2.SpearmanCorr) <- c("S2-G4-CUTTag","ATAC-seq","POLR2A", "H3K27ac","H3K4me1","H3K4me3","H4k16ac")
+class(s2.SpearmanCorr)
+s2.SpearmanCorr <- as.matrix(sapply(s2.SpearmanCorr, as.numeric))
+row.names(s2.SpearmanCorr) <- c("S2-G4-CUTTag","ATAC-seq","POLR2A", "H3K27ac","H3K4me1","H3K4me3","H4k16ac")
+corrplot(s2.SpearmanCorr)
+pdf("/home/yuss/flyG4/result/Histone.modifications/Picture/008.1.S2HistoneSpearmanCorr.pdf",width = 5,height = 5)
+corrplot(s2.SpearmanCorr, method = "circle", type = "upper",
+         tl.col = "black", tl.cex = 0.8, tl.srt = 45,tl.pos = "lt")
+corrplot(s2.SpearmanCorr, method = "number", type = "lower",
+         tl.col = "n", tl.cex = 0.8, tl.pos = "n",
+         add = T)
+dev.off()
+##ggsave(filename = paste0("/home/yuss/flyG4/result/Histone.modifications/Picture/",Num,"S2HistoneSpearmanCorr.pdf"),device = "pdf",width = 4,height = 4)
+
+kc.SpearmanCorr <- fread('/home/yuss/flyG4/result/Histone.modifications/kc.scatterplot.SpearmanCorr.readCounts.tab')
+row.names(kc.SpearmanCorr) <- c("Kc-G4-CUTTag","ATAC-seq","POLR2A", "H3K27ac","H3K4me1","H3K4me3","H4k16ac")
+kc.SpearmanCorr <- kc.SpearmanCorr[,-1]
+colnames(kc.SpearmanCorr) <- c("Kc-G4-CUTTag","ATAC-seq","POLR2A", "H3K27ac","H3K4me1","H3K4me3","H4k16ac")
+class(kc.SpearmanCorr)
+kc.SpearmanCorr <- as.matrix(sapply(kc.SpearmanCorr, as.numeric))
+row.names(kc.SpearmanCorr) <- c("Kc-G4-CUTTag","ATAC-seq","POLR2A", "H3K27ac","H3K4me1","H3K4me3","H4k16ac")
+corrplot(kc.SpearmanCorr)
+pdf("/home/yuss/flyG4/result/Histone.modifications/Picture/008.1.KcHistoneSpearmanCorr.pdf",width = 5,height = 5)
+corrplot(kc.SpearmanCorr, method = "circle", type = "upper",
+         tl.col = "black", tl.cex = 0.8, tl.srt = 45,tl.pos = "lt")
+corrplot(kc.SpearmanCorr, method = "number", type = "lower",
+         tl.col = "n", tl.cex = 0.8, tl.pos = "n",
+         add = T)
+dev.off()
+```
+

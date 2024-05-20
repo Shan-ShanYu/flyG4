@@ -1,0 +1,4 @@
+/home/yuss/flyG4/data/CUTTaq.ylxiong/KC-G4-rep1_R1.q20.marked_duplicates.bam
+/home/yuss/flyG4/data/CUTTaq.ylxiong/KC-G4-rep2_R1.q20.marked_duplicates.bam
+/home/yuss/flyG4/data/CUTTaq.ylxiong/S2-G4-rep1_R1.q20.marked_duplicates.bam
+/home/yuss/flyG4/data/CUTTaq.ylxiong/S2-G4-rep2_R1.q20.marked_duplicates.bam

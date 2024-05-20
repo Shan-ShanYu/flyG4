@@ -1,0 +1,239 @@
+---
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+#转录组数据的质量控制
+
+#第一步转录组上游分析
+---
+title: "转录组上游分析"
+author: "yuss"
+date: "钉钉2024-01-22"
+code path: /home/ssyu/flyG4/data/KcS2.RNAseq/   
+
+```{bash}
+重命名
+vi name.txt ##把excel文件的那一列复制进去（其中有一个文件还没下载好，先不改这个）
+awk '{print $0 ".fq.gz"}' name.txt > name.fa.gz.txt ##新的文件名
+ls /home/ssyu/flyG4/data/KcS2.RNAseq/*/*/*.gz > rawname.txt
+awk 'BEGIN {FS="/"; OFS="/"} {$(NF)=""; $NF=""; print $0}' rawname.txt > rawname.path.txt ##只留下路径名
+paste -d '' rawname.path.txt name.fa.gz.txt > merged_paths.txt ##新的文件名及路径
+paste -d '\t' rawname.txt merged_paths.txt > rename.txt
+awk '{print "mv "$1" "$2}' rename.txt > rename_script.sh
+nohup sh rename_script.sh
+
+##1.过滤，去除低质量碱基，然后去除3' 末端的adapter,输出trimmed.fq.gz(时间比较久，可能需要五六个小时, 转录组很快十分钟)
+(base) [ssyu@login1 trim_galoredata]$ ls /home/ssyu/flyG4/data/KcS2.RNAseq/*/*/*.gz > fq.txt
+(base) [ssyu@login1 trim_galoredata]$ sed -n '1~2p' fq.txt > 1.txt
+(base) [ssyu@login1 trim_galoredata]$ sed -n '2~2p' fq.txt > 2.txt
+paste 1.txt 2.txt -d " " > fq.txt2
+(base) [ssyu@login1 trim_galoredata]$ cat fq.txt2 | while read id;do arr=($id); fq1=${arr[0]}; fq2=${arr[1]}; k=`basename $fq1`; echo "trim_galore --paired -q 20 --phred33 --length 20 -e 0.1 --stringency 3 -o /home/ssyu/flyG4/result/KcS2.RNAseq/trim_galoredata $fq1 $fq2" > ${k%fq.gz}pbs;done 
+在所有pbs文件第一行加入source /home/ssyu/miniconda3/bin/activate Trimgalore ##来激活Trimgalore环境
+vi 1.sh
+##输入以下循环
+#文件列表
+pbs_files=$(ls *.pbs)
+
+# 循环处理每个PBS文件
+for file in $pbs_files; do
+  tmp_file="tmp_$file"
+
+  # 在临时文件中添加需要的内容作为第一行
+  echo "source /home/ssyu/miniconda3/bin/activate Trimgalore" > $tmp_file
+
+  # 将原始PBS文件的内容附加到临时文件后面
+  cat $file >> $tmp_file
+
+  # 将临时文件覆盖原始PBS文件
+  mv $tmp_file $file
+done
+##运行bash
+bash 1.sh
+##提交
+for i in `ls /home/ssyu/flyG4/result/KcS2.RNAseq/trim_galoredata/*.pbs`;do qsub -q batch -V -l nodes=1:ppn=7 $i;done
+
+##2.质控，输出fastqc.zip和.html
+for i in `ls /home/ssyu/flyG4/result/KcS2.RNAseq/trim_galoredata/*.gz`;do j=`basename $i`;echo "fastqc -o /home/ssyu/flyG4/result/KcS2.RNAseq/qc2 $i" > ${j%fq.gz}pbs;done
+for i in `ls /home/ssyu/flyG4/result/KcS2.RNAseq/*.pbs`;do qsub -q batch -V -l nodes=1:ppn=7 $i;done
+(base) [ssyu@login1 flyG4]$ cd qc2/
+(base) [ssyu@login1 qc2]$ multiqc ./ ##使用MultiQC整合多个质控结果
+
+##3.比对，输入trimmed.fq.gz  用hisat2比对基因组得到sam文件,再用samtools sort将sam文件格式转化与排序为bam文件(bam相当于二进制版的sam)，之后samtools index建立索引(用于后续IGV内可视化)
+已构建果蝇索引、制作剪接体文件
+ ls /home/ssyu/flyG4/result/KcS2.RNAseq/trim_galoredata/*1.fq.gz > 1.pair.txt
+ ls /home/ssyu/flyG4/result/KcS2.RNAseq/trim_galoredata/*2.fq.gz > 2.pair.txt
+ paste 1.pair.txt 2.pair.txt > pair.txt                               
+ cat pair.txt | while read id;do arr=($id); fq1=${arr[0]}; fq2=${arr[1]};j=`basename $fq1`;echo "hisat2 -x /home/ssyu/flyG4/data/ref/align-hisat2/dmel -1 $fq1 -2 $fq2 --known-splicesite-infile /home/ssyu/flyG4/data/ref/dmel.splicesites.txt | samtools sort -O bam -o /home/ssyu/flyG4/result/KcS2.RNAseq/mapping/${j%fq.gz}bam" > ${j%.fq.gz}.pbs;done
+for i in `ls /home/ssyu/flyG4/result/KcS2.RNAseq/*.pbs`;do qsub -q batch -V -l nodes=1:ppn=7 $i;done
+
+##4.筛选序列质量大于20，输出q20.bam
+ls /home/ssyu/flyG4/result/KcS2.RNAseq/mapping/*bam > bam.txt
+less bam.txt
+for i in `less bam.txt`;do j=`basename $i`;echo "samtools view -b $i -q 20 -o ${i%bam}q20.bam" > ${j%bam}pbs;done
+for i in `ls /home/ssyu/flyG4/result/KcS2.RNAseq/*.pbs`;do qsub -q batch -V -l nodes=1:ppn=14 $i;done
+
+##5.定量分析
+echo "featureCounts -t exon -g gene_id -p -a /home/ssyu/flyG4/data/ref/dmel-all-r6.19.gtf -o /home/ssyu/flyG4/result/KcS2.RNAseq/featureCounts/merged_counts.txt /home/ssyu/flyG4/result/KcS2.RNAseq/mapping/*q20.bam" > 1.pbs
+### -p :指定双端测序文件
+### -t ：指定feature的类型，默认是exon，当然gtf里面还有gene、CDS或者直接以feature命名的分类方式。
+### -g ：gene_id表示meta-feature名称为gene_id(ensembl名称)
+### -a ：指定注释文件  
+### -o 输出文件：可输出raw counts的txt文本及raw counts的summary文本
+##生科院文件拷贝到我们服务器上，在我们服务器运行命令
+scp ssyu@211.69.141.147:/home/ssyu/flyG4/result/KcS2.RNAseq/featureCounts/merged_counts.txt /home/yuss/flyG4/result/KcS2.RNAseq
+```
+
+#第二步原始count矩阵
+---
+title: "count矩阵"
+author: "yuss"
+date: "钉钉2024-01-25"
+code path: ~/flyG4/script/010.1.DEseq2.KcS2.PDSPhen.R   
+```{r}
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.1."
+#### counts ####
+summary_readcounts <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/merged_counts.txt") %>% as.data.frame()
+readcounts <- summary_readcounts[7:ncol(summary_readcounts)]
+colnames(readcounts) <- unlist(lapply(strsplit(colnames(readcounts), "[/]"),"[[",8))
+# strsplit(colnames(readcounts), "[/]") 使用 strsplit 函数，根据斜杠字符 ("/") 将每个列名分割成一个字符串向量。这将生成一个列表，列表中的每个元素是一个字符串向量，包含分割后的各部分。
+# lapply(..., "[[", 8) 使用 lapply 函数来遍历上一步生成的列表，并提取每个字符串向量的第 8 个元素，这是分割后的文件名部分。
+# unlist(...) 将前一步得到的提取文件名的结果合并成一个字符向量。
+colnames(readcounts) <- unlist(lapply(strsplit(colnames(readcounts),"[.]"),"[[",1))
+colnames(readcounts) <- sub("_1_val_1", "", colnames(readcounts))
+row.names(readcounts) <- summary_readcounts$Geneid
+readcounts<-readcounts[apply(readcounts, 1, sum)>0,]
+readcounts <- readcounts[,c(1:8,10:17)]
+sample_name <- factor(colnames(readcounts))
+metadata <- data.frame(sample_name)
+metadata$treat <- as.factor(rep(rep(c("con", "PDS", "Phen"), c(3, 3, 2)),times=2))
+metadata$cell <- as.factor(rep(c("kc","s2"),each=8))
+readcounts$geneid <- rownames(readcounts)
+
+##分细胞系
+readcounts_kc <- readcounts[,c(17,1:8)]
+readcounts_s2 <- readcounts[,c(17,9:16)]
+metadata_kc <- metadata[1:8,]
+metadata_s2 <- metadata[9:16,]
+
+write.table(readcounts,file = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/",Num,"counts.txt"),
+            sep = '\t',col.names = T,row.names = F,quote = F)
+write.table(metadata,file = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/",Num,"metadata.txt"),
+            sep = '\t',col.names = T,row.names = F,quote = F)
+write.table(readcounts_kc,file = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/",Num,"kc.counts.txt"),
+            sep = '\t',col.names = T,row.names = F,quote = F)
+write.table(readcounts_s2,file = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/",Num,"s2.counts.txt"),
+            sep = '\t',col.names = T,row.names = F,quote = F)
+write.table(metadata_kc,file = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/",Num,"metadata_kc.txt"),
+            sep = '\t',col.names = T,row.names = F,quote = F)
+write.table(metadata_s2,file = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/",Num,"metadata_s2.txt"),
+            sep = '\t',col.names = T,row.names = F,quote = F)
+```
+
+#第三步TPM
+---
+title: "计算TPM"
+author: "yuss"
+date: "钉钉2024-01-25"
+code path: ~/flyG4/script/010.2.TPM.KcS2.PDSPhen.R  
+```{r}
+#### 计算TPM ####
+#之前计算过基因长度
+rm(list = ls());gc();rm(list = ls())#清空
+Num = "010.2."
+gene.length <- fread("/home/yuss/flyG4/result/Daniel.Robert.Genetics.RNAseq/002.2.dmel.genelength.txt") %>% as.data.frame()
+counts <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.1.kc.counts.txt") %>% as.data.frame()
+tpm.calculate = function(exprset,len){
+  readperlength = t(do.call(rbind, lapply(1:ncol(exprset), function(i){
+    exprset[,i]/len})))
+  totalcounts <- colSums(readperlength)
+  tpm = t(apply(readperlength, 1, function(x) 10^6 * x/totalcounts)) %>% as.data.frame()
+  colnames(tpm) = colnames(exprset)
+  row.names(tpm) = row.names(exprset)
+  return(tpm)
+}
+counts$length = gene.length[match(counts$geneid,gene.length$gene.name),2]
+counts <- column_to_rownames(counts,var= "geneid")
+tpm = tpm.calculate(counts[,-9],counts$length) #ncol() 函数返回矩阵的列数
+tpm$con <- rowMeans(tpm[,1:3])
+tpm$PDS <- rowMeans(tpm[,4:6])
+tpm$Phen <- rowMeans(tpm[,7:8])
+tpm$gene_id <- rownames(tpm)
+write.table(tpm,file = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/",Num,"KcTpm.txt"),
+            sep = '\t',col.names = T,row.names = F,quote = F)
+
+counts <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.1.s2.counts.txt") %>% as.data.frame()
+tpm.calculate = function(exprset,len){
+  readperlength = t(do.call(rbind, lapply(1:ncol(exprset), function(i){
+    exprset[,i]/len})))
+  totalcounts <- colSums(readperlength)
+  tpm = t(apply(readperlength, 1, function(x) 10^6 * x/totalcounts)) %>% as.data.frame()
+  colnames(tpm) = colnames(exprset)
+  row.names(tpm) = row.names(exprset)
+  return(tpm)
+}
+counts$length = gene.length[match(counts$geneid,gene.length$gene.name),2]
+counts <- column_to_rownames(counts,var= "geneid")
+tpm = tpm.calculate(counts[,-9],counts$length) #ncol() 函数返回矩阵的列数
+tpm$con <- rowMeans(tpm[,1:3])
+tpm$PDS <- rowMeans(tpm[,4:6])
+tpm$Phen <- rowMeans(tpm[,7:8])
+tpm$gene_id <- rownames(tpm)
+write.table(tpm,file = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/",Num,"S2Tpm.txt"),
+            sep = '\t',col.names = T,row.names = F,quote = F)
+```
+
+#第四步PCA分析
+---
+title: "PCA分析"
+author: "yuss"
+date: "钉钉2024-01-25"
+code path: ~/flyG4/script/010.2.TPM.KcS2.PDSPhen.R  
+
+```{r}
+kc.tpm <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.2.KcTpm.txt") %>% as.data.frame()
+s2.tpm <- fread("/home/yuss/flyG4/result/KcS2.RNAseq/010.2.S2Tpm.txt") %>% as.data.frame()
+rownames(kc.tpm) <- kc.tpm$gene_id
+kc.tpm <- kc.tpm[,c(12,1:3,7:8)]
+rownames(s2.tpm) <- s2.tpm$gene_id
+s2.tpm <- s2.tpm[,c(12,1:3,7:8)]
+all <- left_join(kc.tpm,s2.tpm,"gene_id")
+rownames(all) <- all$gene_id
+all <- all[,-1]
+all <- all[apply(all, 1, sum)>0,]
+data <- t(all) ##转置
+data.pca <- prcomp(data,center = TRUE,scale. = TRUE) ##使用prcomp函数做PCA, 数据要进行标准化，参数都是T
+summary(data.pca)
+
+pca1.res <- as.data.frame(data.pca$x)
+pca1.res$treat=unlist(lapply(strsplit(rownames(pca1.res),"_"),"[[",2))
+pca1.res$cell=unlist(lapply(strsplit(rownames(pca1.res),"_"),"[[",1))
+pca1.res
+##计算每个主成分对方差的解释度
+pca1.var <- data.pca$sdev^2
+pca1.var.per <- round(pca1.var/sum(pca1.var)*100, 1)
+pca1.res$treat <- factor(pca1.res$treat,
+                       levels = c("con", "Phen"),
+                       labels = c("Control", "PhenDC3"))
+pca1.res$cell <- factor(pca1.res$cell,
+                        levels = c("kc", "s2"),
+                        labels = c("Kc167", "S2"))
+ggplot(pca1.res, aes(x=PC1, y=PC2, color=cell, shape=treat)) +
+  geom_point(size=3)+
+  theme_bw()+
+  xlab(paste("PC1 - ", pca1.var.per[1], "% variance", sep=""))+
+  ylab(paste("PC2 - ", pca1.var.per[2], "% variance", sep=""))+
+  guides(color=guide_legend(title = "Cell"))+
+  guides(shape=guide_legend(title = "Treat"))+
+  scale_color_manual(values=c("#FF7F50","#104E8B"))+
+  theme(axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12))
+
+ggsave(filename = paste0("/home/yuss/flyG4/result/KcS2.RNAseq/Picture/",Num,"PCA.pdf"),
+       device = "pdf",width = 5.6,height = 3.4)  
+```
+
